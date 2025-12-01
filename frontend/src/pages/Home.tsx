@@ -10,7 +10,6 @@ const Home: React.FC = () => {
             <div className="absolute inset-0 z-0">
                 <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl animate-pulse" />
                 <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl animate-pulse delay-1000" />
-                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20" />
             </div>
 
             <div className="relative z-10 w-full min-h-screen flex flex-col justify-center items-center text-center px-4 sm:px-6 lg:px-8 py-20">

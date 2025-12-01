@@ -7,6 +7,8 @@ load_dotenv()
 
 API_KEY = os.getenv("OPENROUTER_API_KEY")
 BASE_URL = os.getenv("OPENROUTER_BASE_URL")
+MODEL_MAIN = os.getenv("OPENROUTER_MODEL_MAIN", "deepseek/deepseek-v3.2-exp")
+MODEL_FALLBACK = os.getenv("OPENROUTER_MODEL_FALLBACK", "x-ai/grok-4.1-fast:free")
 
 def analyze_document_content(text: str) -> dict:
     """
@@ -49,7 +51,7 @@ def analyze_document_content(text: str) -> dict:
     # Helper function to call LLM
     def call_llm(system_prompt, user_text):
         data = {
-            "model": "deepseek/deepseek-v3.2-exp", 
+            "model": MODEL_FALLBACK,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_text[:3000]} # Limit length
@@ -61,6 +63,17 @@ def analyze_document_content(text: str) -> dict:
             response.raise_for_status()
             res_json = response.json()
             return res_json['choices'][0]['message']['content']
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 401:
+                print(f"Authentication failed: {response.json()}")
+                return "API认证失败，请检查API密钥配置"
+            elif response.status_code == 429:
+                print(f"Rate limit exceeded: {response.json()}")
+                return "请求频率超限，请稍后再试"
+            else:
+                print(f"HTTP Error: {e}")
+                print(f"Response content: {response.text}")
+                return "服务暂时不可用"
         except Exception as e:
             print(f"LLM Call Error: {e}")
             return "分析失败"
@@ -104,7 +117,7 @@ def generate_logic_test_questions():
     }
     
     data = {
-        "model": "deepseek/deepseek-v3.2-exp", 
+        "model": MODEL_MAIN, 
         "messages": [
             {"role": "system", "content": "你是一个专业的心理测量学家和职业规划专家。"},
             {"role": "user", "content": prompt}
@@ -129,6 +142,17 @@ def generate_logic_test_questions():
             
         return json.loads(content.strip())
         
+    except requests.exceptions.HTTPError as e:
+        if response.status_code == 401:
+            print(f"Authentication failed: {response.json()}")
+            return []
+        elif response.status_code == 429:
+            print(f"Rate limit exceeded: {response.json()}")
+            return []
+        else:
+            print(f"HTTP Error: {e}")
+            print(f"Response content: {response.text}")
+            return []
     except Exception as e:
         print(f"Error generating questions: {e}")
         return []

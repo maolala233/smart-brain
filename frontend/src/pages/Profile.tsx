@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { motion } from 'framer-motion';
-import { User, Brain, MessageSquare, Zap, Loader2, Share2, Download } from 'lucide-react';
+import { User, Brain, MessageSquare, Zap, Loader2 } from 'lucide-react';
 
 interface Persona {
     base_logic_type: string;
@@ -86,14 +86,6 @@ const Profile: React.FC = () => {
                             <div>
                                 <h1 className="text-3xl font-bold">{userData.name}</h1>
                                 <p className="text-gray-400 text-lg">{userData.role} • {userData.domain}</p>
-                            </div>
-                            <div className="flex gap-3">
-                                <button className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
-                                    <Share2 className="w-5 h-5" />
-                                </button>
-                                <button className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors">
-                                    <Download className="w-5 h-5" />
-                                </button>
                             </div>
                         </div>
 
