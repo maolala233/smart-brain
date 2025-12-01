@@ -41,15 +41,21 @@ class Neo4jService:
                     subgraph_id=subgraph_id
                 )
             
-            # Create nodes
+            # Create or update nodes with MERGE
             for node in nodes:
+                # Use MERGE to avoid duplicates - if node exists, update it
                 query = f"""
                 MERGE (n:{node['label']} {{
                     id: $id,
                     user_id: $user_id,
                     subgraph_id: $subgraph_id
                 }})
-                SET n.name = $name
+                ON CREATE SET 
+                    n.name = $name,
+                    n.created_at = timestamp()
+                ON MATCH SET 
+                    n.name = $name,
+                    n.updated_at = timestamp()
                 """
                 props = node.get('properties', {})
                 session.run(
@@ -60,12 +66,15 @@ class Neo4jService:
                     name=props.get('name', node['id'])
                 )
             
-            # Create relationships
+            # Create or update relationships
             for rel in relationships:
+                # MERGE relationships to avoid duplicates
                 query = f"""
                 MATCH (a {{id: $from_id, user_id: $user_id, subgraph_id: $subgraph_id}})
                 MATCH (b {{id: $to_id, user_id: $user_id, subgraph_id: $subgraph_id}})
                 MERGE (a)-[r:{rel['type']}]->(b)
+                ON CREATE SET r.created_at = timestamp()
+                ON MATCH SET r.updated_at = timestamp()
                 """
                 session.run(
                     query,

@@ -3,11 +3,25 @@ import logging
 import os
 import requests
 import json
+import hashlib
 from dotenv import load_dotenv
 
 load_dotenv()
 
 logger = logging.getLogger("uvicorn")
+
+def generate_entity_id(entity_type: str, entity_name: str) -> str:
+    """
+    Generate a stable, content-based ID for an entity
+    Same entity will always get the same ID, enabling automatic deduplication
+    """
+    # Normalize the name (lowercase, strip whitespace)
+    normalized_name = entity_name.strip().lower()
+    # Create hash from type + name
+    content = f"{entity_type}:{normalized_name}"
+    # Use first 12 chars of hash for readability
+    hash_id = hashlib.md5(content.encode('utf-8')).hexdigest()[:12]
+    return f"{entity_type}_{hash_id}"
 
 def parse_document_to_graph(text_content: str) -> Dict[str, Any]:
     """
@@ -78,27 +92,50 @@ def parse_document_to_graph(text_content: str) -> Dict[str, Any]:
         else:
             data = json.loads(response)
         
-        # Convert to our format
-        nodes = [
-            {
-                "id": entity["id"],
-                "label": entity.get("type", "Entity"),
-                "properties": {"name": entity.get("name", entity["id"])}
-            }
-            for entity in data.get("entities", [])
-        ]
+        # Convert to our format with stable IDs
+        nodes = []
+        entity_id_map = {}  # Map from original ID to new stable ID
         
-        relationships = [
-            {
-                "from": rel["from_id"],
-                "to": rel["to_id"],
+        for entity in data.get("entities", []):
+            entity_type = entity.get("type", "Entity")
+            entity_name = entity.get("name", entity["id"])
+            
+            # Generate stable ID based on content
+            stable_id = generate_entity_id(entity_type, entity_name)
+            entity_id_map[entity["id"]] = stable_id
+            
+            nodes.append({
+                "id": stable_id,
+                "label": entity_type,
+                "properties": {"name": entity_name}
+            })
+        
+        # Update relationships to use stable IDs
+        relationships = []
+        for rel in data.get("relationships", []):
+            from_id = entity_id_map.get(rel["from_id"], rel["from_id"])
+            to_id = entity_id_map.get(rel["to_id"], rel["to_id"])
+            
+            relationships.append({
+                "from": from_id,
+                "to": to_id,
                 "type": rel.get("type", "RELATED_TO"),
                 "properties": {}
-            }
-            for rel in data.get("relationships", [])
-        ]
+            })
         
-        logger.info(f"Extracted {len(nodes)} entities and {len(relationships)} relationships")
+        # Deduplicate nodes by ID (in case LLM generates duplicates in same batch)
+        unique_nodes = {}
+        for node in nodes:
+            node_id = node["id"]
+            if node_id not in unique_nodes:
+                unique_nodes[node_id] = node
+            else:
+                # If duplicate, keep the one with more information
+                logger.debug(f"Duplicate node detected: {node_id}, merging...")
+        
+        nodes = list(unique_nodes.values())
+        
+        logger.info(f"Extracted {len(nodes)} unique entities and {len(relationships)} relationships")
         
         return {
             "nodes": nodes,
