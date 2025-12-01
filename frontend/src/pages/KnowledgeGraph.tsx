@@ -138,10 +138,14 @@ const KnowledgeGraph: React.FC = () => {
             } else {
                 // 如果网络实例已存在，只需更新数据
                 const network = networkRef.current;
-                const nodesDataSet = new DataSet(nodes);
-                const edgesDataSet = new DataSet(edges);
-                const dataSet: any = { nodes: nodesDataSet, edges: edgesDataSet };
-                network.setData(dataSet);
+                
+                // 清空现有数据
+                (network.body.data.nodes as DataSet<any>).clear();
+                (network.body.data.edges as DataSet<any>).clear();
+                
+                // 添加新数据
+                (network.body.data.nodes as DataSet<any>).add(nodes);
+                (network.body.data.edges as DataSet<any>).add(edges);
             }
         }
 
