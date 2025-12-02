@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, ArrowRight, Loader2 } from 'lucide-react';
+import { CheckCircle, ArrowRight, Loader2, SkipForward } from 'lucide-react';
 
 interface Option {
     text: string;
@@ -125,8 +125,17 @@ const LogicTest: React.FC = () => {
                             <h2 className="text-lg font-bold text-white">{userProfile.name}</h2>
                             <p className="text-sm text-gray-400">{userProfile.role} • {userProfile.domain}</p>
                         </div>
-                        <div className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-lg text-sm font-medium">
-                            正在测评
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => navigate('/analysis')}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors text-sm font-medium"
+                            >
+                                <SkipForward className="w-4 h-4" />
+                                跳过测试
+                            </button>
+                            <div className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-lg text-sm font-medium">
+                                正在测评
+                            </div>
                         </div>
                     </motion.div>
                 )}
