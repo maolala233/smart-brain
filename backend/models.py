@@ -61,3 +61,11 @@ class KnowledgeGraphOperation(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     subgraph = relationship("KnowledgeSubgraph", back_populates="operations")
+
+class Question(Base):
+    __tablename__ = "questions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    text = Column(String(500), nullable=False)
+    options = Column(JSON, nullable=False)  # List of options
+    dimension = Column(String(50), nullable=True)  # e.g., "E/I", "S/N"
