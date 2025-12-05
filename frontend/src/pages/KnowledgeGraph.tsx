@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import * as vis from 'vis-network';
 import { DataSet } from 'vis-data';
-import { ArrowLeft, Upload, FileText, Trash2, RefreshCw, Share2, Loader2, X, Plus, Edit3 } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, Trash2, RefreshCw, Share2, Loader2, X, Plus, Edit } from 'lucide-react';
 
 interface UserProfile {
     id: number;
@@ -28,6 +28,11 @@ const KnowledgeGraph: React.FC = () => {
     const [showCreateSubgraph, setShowCreateSubgraph] = useState(false);
     const [newSubgraphName, setNewSubgraphName] = useState('');
     const [newSubgraphDescription, setNewSubgraphDescription] = useState('');
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [showEditSubgraph, setShowEditSubgraph] = useState(false);
+    const [editSubgraphName, setEditSubgraphName] = useState('');
+    const [editSubgraphDescription, setEditSubgraphDescription] = useState('');
+
     const [files, setFiles] = useState<File[]>([]);
     const [textInput, setTextInput] = useState('');
     const [loading, setLoading] = useState(false);
@@ -81,8 +86,8 @@ const KnowledgeGraph: React.FC = () => {
                 label: n.name || n.label,
                 group: n.label,
                 shape: 'dot',
-                size: 20,
-                font: { size: 14, color: '#ffffff' }
+                size: 15,
+                font: { size: 14, color: '#ffffff', strokeWidth: 0, bold: { color: '#ffffff' } }
             }));
 
             const edges = graphData.relationships.map((r: any) => ({
@@ -90,11 +95,11 @@ const KnowledgeGraph: React.FC = () => {
                 to: r.to,
                 label: r.type,
                 arrows: 'to',
-                font: { align: 'middle', font: 10, color: '#aaaaaa' },
+                font: { align: 'middle', size: 10, color: '#ffffff', strokeWidth: 0 },
                 color: { color: '#666666' }
             }));
 
-            const data: any = { nodes, edges };
+
             const options: vis.Options = {
                 nodes: {
                     borderWidth: 2,
@@ -108,7 +113,7 @@ const KnowledgeGraph: React.FC = () => {
                 edges: {
                     width: 1,
                     shadow: true,
-                    smooth: { type: 'continuous' }
+                    smooth: { type: 'continuous', enabled: true, roundness: 0.5 }
                 },
                 physics: {
                     stabilization: false,
@@ -132,20 +137,20 @@ const KnowledgeGraph: React.FC = () => {
             // 如果网络实例不存在，则创建新实例
             if (!networkRef.current) {
                 const nodesDataSet = new DataSet(nodes);
-                const edgesDataSet = new DataSet(edges);
+                const edgesDataSet = new DataSet(edges as any);
                 const dataSet: any = { nodes: nodesDataSet, edges: edgesDataSet };
                 networkRef.current = new vis.Network(networkContainer.current, dataSet, options);
             } else {
                 // 如果网络实例已存在，只需更新数据
                 const network = networkRef.current;
-                
+
                 // 清空现有数据
-                (network.body.data.nodes as DataSet<any>).clear();
-                (network.body.data.edges as DataSet<any>).clear();
-                
+                ((network as any).body.data.nodes as DataSet<any>).clear();
+                ((network as any).body.data.edges as DataSet<any>).clear();
+
                 // 添加新数据
-                (network.body.data.nodes as DataSet<any>).add(nodes);
-                (network.body.data.edges as DataSet<any>).add(edges);
+                ((network as any).body.data.nodes as DataSet<any>).add(nodes);
+                ((network as any).body.data.edges as DataSet<any>).add(edges);
             }
         }
 
@@ -183,18 +188,18 @@ const KnowledgeGraph: React.FC = () => {
 
     const createSubgraph = async () => {
         if (!selectedUserId || !newSubgraphName.trim()) return;
-        
+
         try {
             const response = await axios.post('/api/kg/subgraph', {
                 user_id: selectedUserId,
                 name: newSubgraphName,
                 description: newSubgraphDescription
             });
-            
+
             // Add new subgraph to list
             setSubgraphs(prev => [...prev, response.data]);
             setSelectedSubgraphId(response.data.id);
-            
+
             // Reset form
             setNewSubgraphName('');
             setNewSubgraphDescription('');
@@ -218,12 +223,12 @@ const KnowledgeGraph: React.FC = () => {
 
         setUploading(true);
         const formData = new FormData();
-        
+
         // Append all files
         files.forEach(file => {
             formData.append('files', file);
         });
-        
+
         if (textInput) formData.append('text_input', textInput);
         formData.append('subgraph_id', selectedSubgraphId.toString());
 
@@ -243,15 +248,55 @@ const KnowledgeGraph: React.FC = () => {
         }
     };
 
-    const handleDeleteGraph = async () => {
-        if (!selectedUserId || !selectedSubgraphId || !window.confirm("确定要清空该子图的知识图谱吗？")) return;
+    const handleDeleteClick = () => {
+        if (!selectedUserId || !selectedSubgraphId) return;
+        setShowDeleteConfirm(true);
+    };
+
+    const confirmDeleteSubgraph = async () => {
+        if (!selectedUserId || !selectedSubgraphId) return;
         try {
             await axios.delete(`/api/kg/subgraph/${selectedSubgraphId}`);
             setGraphData({ nodes: [], relationships: [] });
             // Refresh subgraphs list
             fetchSubgraphs(selectedUserId);
+            setShowDeleteConfirm(false);
         } catch (err) {
             console.error("Delete failed", err);
+        }
+    };
+
+    const handleEditClick = () => {
+        if (!selectedSubgraphId) return;
+        const currentSubgraph = subgraphs.find(s => s.id === selectedSubgraphId);
+        if (currentSubgraph) {
+            setEditSubgraphName(currentSubgraph.name);
+            setEditSubgraphDescription(currentSubgraph.description || '');
+            setShowEditSubgraph(true);
+        }
+    };
+
+    const updateSubgraph = async () => {
+        if (!selectedSubgraphId || !editSubgraphName.trim()) return;
+
+        try {
+            const response = await axios.put(`/api/kg/subgraph/${selectedSubgraphId}`, {
+                name: editSubgraphName,
+                description: editSubgraphDescription
+            });
+
+            // Update subgraph in list
+            setSubgraphs(prev => prev.map(s =>
+                s.id === selectedSubgraphId ? response.data : s
+            ));
+
+            // Reset form and close modal
+            setEditSubgraphName('');
+            setEditSubgraphDescription('');
+            setShowEditSubgraph(false);
+        } catch (err) {
+            console.error("Failed to update subgraph", err);
+            alert("更新子图失败");
         }
     };
 
@@ -282,7 +327,7 @@ const KnowledgeGraph: React.FC = () => {
                                 <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
                             ))}
                         </select>
-                        
+
                         <div className="flex items-center gap-2">
                             <select
                                 value={selectedSubgraphId || ''}
@@ -294,7 +339,7 @@ const KnowledgeGraph: React.FC = () => {
                                     <option key={s.id} value={s.id}>{s.name}</option>
                                 ))}
                             </select>
-                            
+
                             <button
                                 onClick={() => setShowCreateSubgraph(true)}
                                 className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
@@ -302,8 +347,17 @@ const KnowledgeGraph: React.FC = () => {
                             >
                                 <Plus className="w-5 h-5" />
                             </button>
+
+                            <button
+                                onClick={handleEditClick}
+                                disabled={!selectedSubgraphId}
+                                className="p-2 hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="编辑子图"
+                            >
+                                <Edit className="w-5 h-5" />
+                            </button>
                         </div>
-                        
+
                         <button
                             onClick={() => {
                                 if (selectedUserId) {
@@ -319,9 +373,9 @@ const KnowledgeGraph: React.FC = () => {
                             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
                         </button>
                         <button
-                            onClick={handleDeleteGraph}
+                            onClick={handleDeleteClick}
                             className="p-2 hover:bg-red-900/20 text-red-400 rounded-lg transition-colors"
-                            title="清空图谱"
+                            title="删除子图"
                         >
                             <Trash2 className="w-5 h-5" />
                         </button>
@@ -377,6 +431,81 @@ const KnowledgeGraph: React.FC = () => {
                     </div>
                 )}
 
+                {/* Delete Confirmation Modal */}
+                {showDeleteConfirm && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <div className="bg-gray-800 rounded-2xl p-6 w-full max-w-md border border-gray-700">
+                            <h3 className="text-xl font-semibold mb-4 text-white">确认删除子图</h3>
+                            <p className="text-gray-300 mb-6">
+                                确定要删除该子图吗？此操作将永久删除该子图及其所有关联数据，且不可恢复。
+                            </p>
+                            <div className="flex justify-end gap-3">
+                                <button
+                                    onClick={() => setShowDeleteConfirm(false)}
+                                    className="px-4 py-2 border border-gray-600 rounded-lg hover:bg-gray-700 transition-colors text-white"
+                                >
+                                    取消
+                                </button>
+                                <button
+                                    onClick={confirmDeleteSubgraph}
+                                    className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg transition-colors text-white"
+                                >
+                                    确认删除
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Edit Subgraph Modal */}
+                {showEditSubgraph && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <div className="bg-gray-800 rounded-2xl p-6 w-full max-w-md border border-gray-700">
+                            <h3 className="text-xl font-semibold mb-4 text-white">编辑子图</h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">子图名称</label>
+                                    <input
+                                        type="text"
+                                        value={editSubgraphName}
+                                        onChange={(e) => setEditSubgraphName(e.target.value)}
+                                        className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500"
+                                        placeholder="请输入子图名称"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">描述（可选）</label>
+                                    <textarea
+                                        value={editSubgraphDescription}
+                                        onChange={(e) => setEditSubgraphDescription(e.target.value)}
+                                        className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 h-24 resize-none"
+                                        placeholder="请输入子图描述"
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-3 mt-6">
+                                <button
+                                    onClick={() => {
+                                        setShowEditSubgraph(false);
+                                        setEditSubgraphName('');
+                                        setEditSubgraphDescription('');
+                                    }}
+                                    className="px-4 py-2 border border-gray-600 rounded-lg hover:bg-gray-700 transition-colors text-white"
+                                >
+                                    取消
+                                </button>
+                                <button
+                                    onClick={updateSubgraph}
+                                    disabled={!editSubgraphName.trim()}
+                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 rounded-lg transition-colors text-white"
+                                >
+                                    保存
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 min-h-0">
                     {/* Sidebar: Upload & Controls */}
                     <div className="lg:col-span-1 bg-gray-800/50 backdrop-blur-xl rounded-2xl border border-gray-700 p-6 flex flex-col gap-6 h-fit">
@@ -413,12 +542,12 @@ const KnowledgeGraph: React.FC = () => {
                                         <h4 className="text-sm font-medium mb-2 text-gray-300">已选择文件:</h4>
                                         <ul className="space-y-1">
                                             {files.map((file, index) => (
-                                                <li 
-                                                    key={index} 
+                                                <li
+                                                    key={index}
                                                     className="flex items-center justify-between text-xs bg-gray-800/50 rounded px-2 py-1"
                                                 >
                                                     <span className="truncate max-w-[70%]">{file.name}</span>
-                                                    <button 
+                                                    <button
                                                         onClick={() => removeFile(index)}
                                                         className="text-red-400 hover:text-red-300 p-1"
                                                     >
@@ -456,7 +585,7 @@ const KnowledgeGraph: React.FC = () => {
                                         </>
                                     )}
                                 </button>
-                                
+
                                 {selectedSubgraphId && (
                                     <div className="text-xs text-gray-400 bg-gray-900/50 rounded-lg p-3">
                                         <p className="font-medium mb-1">当前子图</p>

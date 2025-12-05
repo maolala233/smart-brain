@@ -86,6 +86,34 @@ def delete_subgraph(subgraph_id: int, db: Session = Depends(get_db)):
     
     return {"msg": "Subgraph deleted"}
 
+@router.put("/subgraph/{subgraph_id}", response_model=SubgraphResponse)
+def update_subgraph(
+    subgraph_id: int,
+    name: Optional[str] = Body(None),
+    description: Optional[str] = Body(None),
+    db: Session = Depends(get_db)
+):
+    """Update a subgraph's name and/or description"""
+    subgraph = db.query(models.KnowledgeSubgraph).filter(models.KnowledgeSubgraph.id == subgraph_id).first()
+    if not subgraph:
+        raise HTTPException(status_code=404, detail="Subgraph not found")
+    
+    if name is not None:
+        subgraph.name = name
+    if description is not None:
+        subgraph.description = description
+    
+    db.commit()
+    db.refresh(subgraph)
+    
+    return {
+        "id": subgraph.id,
+        "user_id": subgraph.user_id,
+        "name": subgraph.name,
+        "description": subgraph.description,
+        "created_at": subgraph.created_at.isoformat()
+    }
+
 # --- Knowledge Graph Operations ---
 
 @router.post("/upload/{user_id}")
