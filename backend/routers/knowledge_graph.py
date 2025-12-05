@@ -114,6 +114,29 @@ def update_subgraph(
         "created_at": subgraph.created_at.isoformat()
     }
 
+@router.get("/search/{user_id}")
+def search_knowledge_graph(
+    user_id: int,
+    subgraph_id: int,
+    query: str,
+    db: Session = Depends(get_db)
+):
+    """Search for nodes and relationships in the knowledge graph"""
+    if not query or not query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+    
+    # Verify subgraph exists
+    subgraph = db.query(models.KnowledgeSubgraph).filter(models.KnowledgeSubgraph.id == subgraph_id).first()
+    if not subgraph:
+        raise HTTPException(status_code=404, detail="Subgraph not found")
+    
+    try:
+        result = neo4j_service.search_graph(user_id, subgraph_id, query)
+        return result
+    except Exception as e:
+        logger.error(f"Error searching knowledge graph: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # --- Knowledge Graph Operations ---
 
 @router.post("/upload/{user_id}")

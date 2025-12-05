@@ -170,6 +170,61 @@ class Neo4jService:
                 )
             
             logger.info(f"Undid operation for user {user_id}, subgraph {subgraph_id}: removed {len(nodes)} nodes, {len(relationships)} relationships")
+    
+    def search_graph(self, user_id: int, subgraph_id: int, query: str) -> Dict[str, Any]:
+        """
+        Search for nodes and relationships matching the query
+        Returns nodes and relationships that match the search term
+        """
+        with self.driver.session() as session:
+            # Search nodes by name or id (case-insensitive)
+            nodes_result = session.run(
+                """
+                MATCH (n {user_id: $user_id, subgraph_id: $subgraph_id})
+                WHERE toLower(n.name) CONTAINS toLower($search_term) OR toLower(n.id) CONTAINS toLower($search_term)
+                RETURN n.id as id, labels(n)[0] as label, n.name as name
+                """,
+                user_id=user_id,
+                subgraph_id=subgraph_id,
+                search_term=query
+            )
+            nodes = [
+                {
+                    "id": record["id"],
+                    "label": record["label"],
+                    "name": record["name"]
+                }
+                for record in nodes_result
+            ]
+            
+            # Search relationships by type (case-insensitive) - include node names
+            rels_result = session.run(
+                """
+                MATCH (a {user_id: $user_id, subgraph_id: $subgraph_id})-[r]->(b {user_id: $user_id, subgraph_id: $subgraph_id})
+                WHERE toLower(type(r)) CONTAINS toLower($search_term)
+                RETURN a.id as from_id, a.name as from_name, type(r) as type, b.id as to_id, b.name as to_name
+                """,
+                user_id=user_id,
+                subgraph_id=subgraph_id,
+                search_term=query
+            )
+            relationships = [
+                {
+                    "from": record["from_id"],
+                    "from_name": record["from_name"],
+                    "to": record["to_id"],
+                    "to_name": record["to_name"],
+                    "type": record["type"]
+                }
+                for record in rels_result
+            ]
+            
+            logger.info(f"Search for '{query}' in user {user_id}, subgraph {subgraph_id}: found {len(nodes)} nodes, {len(relationships)} relationships")
+            
+            return {
+                "nodes": nodes,
+                "relationships": relationships
+            }
 
 # Global instance
 neo4j_service = Neo4jService()
