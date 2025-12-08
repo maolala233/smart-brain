@@ -62,6 +62,25 @@ const Profile: React.FC = () => {
         );
     }
 
+    // 添加角色和领域的中文映射函数
+    const roles = [
+        { value: 'Developer', label: '开发工程师' },
+        { value: 'Designer', label: '设计师' },
+        { value: 'Product Manager', label: '产品经理' },
+        { value: 'Data Scientist', label: '数据科学家' },
+        { value: 'Executive', label: '高管' }
+    ];
+    const domains = [
+        { value: 'Technology', label: '技术' },
+        { value: 'Finance', label: '金融' },
+        { value: 'Healthcare', label: '医疗' },
+        { value: 'Education', label: '教育' },
+        { value: 'E-commerce', label: '电商' }
+    ];
+
+    const getRoleLabel = (value: string) => roles.find(r => r.value === value)?.label || value;
+    const getDomainLabel = (value: string) => domains.find(d => d.value === value)?.label || value;
+
     return (
         <div className="w-screen min-h-screen bg-gray-900 text-white p-4 pt-20">
             <div className="max-w-4xl mx-auto">
@@ -85,7 +104,7 @@ const Profile: React.FC = () => {
                         <div className="flex justify-between items-start mb-8">
                             <div>
                                 <h1 className="text-3xl font-bold">{userData.name}</h1>
-                                <p className="text-gray-400 text-lg">{userData.role} • {userData.domain}</p>
+                                <p className="text-gray-400 text-lg">{getRoleLabel(userData.role)} • {getDomainLabel(userData.domain)}</p>
                             </div>
                         </div>
 
