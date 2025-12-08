@@ -69,6 +69,16 @@ const Home: React.FC = () => {
                                 <span>知识图谱</span>
                             </motion.button>
                         </Link>
+                        <Link to="/smart-qa">
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                className="flex items-center gap-2 px-8 py-4 bg-blue-600 hover:bg-blue-500 rounded-full text-lg font-bold text-white transition-all shadow-[0_0_20px_rgba(37,99,235,0.5)] hover:shadow-[0_0_30px_rgba(37,99,235,0.8)]"
+                            >
+                                <MessageSquare className="w-5 h-5" />
+                                <span>智慧问答</span>
+                            </motion.button>
+                        </Link>
                     </div>
                 </motion.div>
 

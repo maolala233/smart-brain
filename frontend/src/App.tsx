@@ -7,6 +7,7 @@ import Analysis from './pages/Analysis';
 import Profile from './pages/Profile';
 import UserList from './pages/UserList';
 import KnowledgeGraph from './pages/KnowledgeGraph';
+import SmartQA from './pages/SmartQA';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
         <Route path="profile" element={<Profile />} />
         <Route path="users" element={<UserList />} />
         <Route path="knowledge-graph" element={<KnowledgeGraph />} />
+        <Route path="smart-qa" element={<SmartQA />} />
       </Route>
     </Routes>
   );

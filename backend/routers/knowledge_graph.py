@@ -29,6 +29,10 @@ class SubgraphResponse(BaseModel):
     description: Optional[str]
     created_at: str
 
+class SmartQARequest(BaseModel):
+    query: str
+    subgraph_ids: List[int]
+
 # --- Subgraph Management ---
 
 @router.post("/subgraph", response_model=SubgraphResponse)
@@ -427,10 +431,6 @@ def delete_relationship(
     except Exception as e:
         logger.error(f"Error deleting relationship: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-class SmartQARequest(BaseModel):
-    query: str
-    subgraph_ids: List[int]
 
 @router.post("/smart-qa/{user_id}")
 def smart_qa_chat(
