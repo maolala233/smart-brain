@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import * as vis from 'vis-network';
 import { DataSet } from 'vis-data';
-import { ArrowLeft, Upload, FileText, Trash2, RefreshCw, Share2, Loader2, X, Plus, Edit } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, Trash2, RefreshCw, Share2, Loader2, X, Plus, Edit, Search } from 'lucide-react';
 
 interface UserProfile {
     id: number;
@@ -38,6 +38,10 @@ const KnowledgeGraph: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [graphData, setGraphData] = useState<{ nodes: any[], relationships: any[] } | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<{ nodes: any[], relationships: any[] } | null>(null);
+    const [searching, setSearching] = useState(false);
+    const [showSearchResults, setShowSearchResults] = useState(false);
 
     const networkContainer = useRef<HTMLDivElement>(null);
     const networkRef = useRef<vis.Network | null>(null);
@@ -300,6 +304,34 @@ const KnowledgeGraph: React.FC = () => {
         }
     };
 
+    const handleSearch = async () => {
+        if (!selectedUserId || !selectedSubgraphId || !searchQuery.trim()) return;
+
+        setSearching(true);
+        try {
+            const response = await axios.get(`/api/kg/search/${selectedUserId}`, {
+                params: {
+                    subgraph_id: selectedSubgraphId,
+                    query: searchQuery
+                }
+            });
+            setSearchResults(response.data);
+            setShowSearchResults(true);
+        } catch (err) {
+            console.error("Search failed", err);
+            alert("搜索失败");
+        } finally {
+            setSearching(false);
+        }
+    };
+
+    const clearSearch = () => {
+        setSearchQuery('');
+        setSearchResults(null);
+        setShowSearchResults(false);
+    };
+
+
     return (
         <div className="w-screen min-h-screen bg-gray-900 text-white p-4 md:p-8 pt-24 flex flex-col">
             <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col">
@@ -506,6 +538,74 @@ const KnowledgeGraph: React.FC = () => {
                     </div>
                 )}
 
+                {/* Search Results Modal */}
+                {showSearchResults && searchResults && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-gray-800 rounded-2xl w-full max-w-4xl max-h-[80vh] border border-gray-700 flex flex-col">
+                            <div className="flex items-center justify-between p-6 border-b border-gray-700">
+                                <h3 className="text-xl font-semibold text-white">搜索结果</h3>
+                                <button onClick={() => setShowSearchResults(false)} className="text-gray-400 hover:text-white transition-colors">
+                                    <X className="w-6 h-6" />
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                                <div>
+                                    <h4 className="text-lg font-semibold text-blue-400 mb-3">节点 ({searchResults.nodes.length})</h4>
+                                    {searchResults.nodes.length > 0 ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            {searchResults.nodes.map((node: any, index: number) => (
+                                                <div key={index} className="bg-gray-900/50 border border-gray-700 rounded-lg p-4 hover:border-blue-500 transition-colors">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className="px-2 py-1 bg-blue-600/20 text-blue-400 text-xs rounded">{node.label}</span>
+                                                    </div>
+                                                    <p className="text-white font-medium">{node.name}</p>
+                                                    <p className="text-gray-400 text-sm mt-1">ID: {node.id}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-gray-500 text-center py-4">未找到匹配的节点</p>
+                                    )}
+                                </div>
+                                <div>
+                                    <h4 className="text-lg font-semibold text-purple-400 mb-3">关系 ({searchResults.relationships.length})</h4>
+                                    {searchResults.relationships.length > 0 ? (
+                                        <div className="space-y-2">
+                                            {searchResults.relationships.map((rel: any, index: number) => (
+                                                <div key={index} className="bg-gray-900/50 border border-gray-700 rounded-lg p-4 hover:border-purple-500 transition-colors">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex-1">
+                                                            <span className="text-white font-medium">{rel.from_name || rel.from}</span>
+                                                            <span className="text-gray-500 text-xs block mt-0.5">ID: {rel.from}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                                            <div className="h-px w-8 bg-gray-600"></div>
+                                                            <span className="px-3 py-1 bg-purple-600/20 text-purple-400 text-sm rounded whitespace-nowrap">{rel.type}</span>
+                                                            <div className="h-px w-8 bg-gray-600"></div>
+                                                            <span className="text-gray-400">→</span>
+                                                        </div>
+                                                        <div className="flex-1 text-right">
+                                                            <span className="text-white font-medium">{rel.to_name || rel.to}</span>
+                                                            <span className="text-gray-500 text-xs block mt-0.5">ID: {rel.to}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-gray-500 text-center py-4">未找到匹配的关系</p>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="p-6 border-t border-gray-700 flex justify-end">
+                                <button onClick={() => setShowSearchResults(false)} className="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-white">
+                                    关闭
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 min-h-0">
                     {/* Sidebar: Upload & Controls */}
                     <div className="lg:col-span-1 bg-gray-800/50 backdrop-blur-xl rounded-2xl border border-gray-700 p-6 flex flex-col gap-6 h-fit">
@@ -627,6 +727,57 @@ const KnowledgeGraph: React.FC = () => {
                                 <Share2 className="w-16 h-16 mb-4 opacity-20" />
                                 <p>暂无图谱数据，请先导入文档</p>
                             </div>
+                        )}
+
+                        {/* Search Bar */}
+                        <div className="absolute top-4 left-4 right-4 z-20 flex gap-2">
+                            <div className="flex-1 flex items-center bg-gray-800/90 backdrop-blur-sm border border-gray-700 rounded-lg px-4 py-2">
+                                <Search className="w-5 h-5 text-gray-400 mr-2" />
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                                    placeholder="搜索节点或关系..."
+                                    className="flex-1 bg-transparent border-none focus:outline-none text-white placeholder-gray-500"
+                                />
+                                {searchQuery && (
+                                    <button onClick={clearSearch} className="ml-2 text-gray-400 hover:text-white transition-colors">
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
+                            <button
+                                onClick={handleSearch}
+                                disabled={!searchQuery.trim() || searching}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center gap-2"
+                            >
+                                {searching ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        搜索中...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Search className="w-4 h-4" />
+                                        搜索
+                                    </>
+                                )}
+                            </button>
+                        </div>
+
+                        {/* Search Results Info */}
+                        {searchResults && (
+                            <button
+                                onClick={() => setShowSearchResults(true)}
+                                className="absolute top-20 left-4 z-20 bg-gray-800/90 backdrop-blur-sm border border-gray-700 rounded-lg px-4 py-2 hover:bg-gray-700/90 transition-colors cursor-pointer"
+                            >
+                                <p className="text-sm text-gray-300">
+                                    找到 <span className="text-blue-400 font-semibold">{searchResults.nodes.length}</span> 个节点，
+                                    <span className="text-purple-400 font-semibold ml-1">{searchResults.relationships.length}</span> 个关系
+                                    <span className="ml-2 text-xs text-gray-400">（点击查看详情）</span>
+                                </p>
+                            </button>
                         )}
 
                         <div ref={networkContainer} className="w-full h-full cursor-move" />
