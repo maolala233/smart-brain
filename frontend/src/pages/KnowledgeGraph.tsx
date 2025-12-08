@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import * as vis from 'vis-network';
 import { DataSet } from 'vis-data';
-import { ArrowLeft, Upload, FileText, Trash2, RefreshCw, Share2, Loader2, X, Plus, Edit, Search } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, Trash2, RefreshCw, Share2, Loader2, X, Plus, Edit, Search, PlusCircle, Trash } from 'lucide-react';
 
 interface UserProfile {
     id: number;
@@ -42,6 +42,14 @@ const KnowledgeGraph: React.FC = () => {
     const [searchResults, setSearchResults] = useState<{ nodes: any[], relationships: any[] } | null>(null);
     const [searching, setSearching] = useState(false);
     const [showSearchResults, setShowSearchResults] = useState(false);
+    const [showAddNode, setShowAddNode] = useState(false);
+    const [showAddRelationship, setShowAddRelationship] = useState(false);
+    const [newNodeName, setNewNodeName] = useState('');
+    const [newNodeLabel, setNewNodeLabel] = useState('');
+    const [newRelFrom, setNewRelFrom] = useState('');
+    const [newRelTo, setNewRelTo] = useState('');
+    const [newRelType, setNewRelType] = useState('');
+    const [contextMenu, setContextMenu] = useState<{ x: number, y: number, type: 'node' | 'edge', data: any } | null>(null);
 
     const networkContainer = useRef<HTMLDivElement>(null);
     const networkRef = useRef<vis.Network | null>(null);
@@ -144,6 +152,38 @@ const KnowledgeGraph: React.FC = () => {
                 const edgesDataSet = new DataSet(edges as any);
                 const dataSet: any = { nodes: nodesDataSet, edges: edgesDataSet };
                 networkRef.current = new vis.Network(networkContainer.current, dataSet, options);
+
+                // Add context menu listener
+                networkRef.current.on('oncontext', (params: any) => {
+                    params.event.preventDefault();
+                    const nodeId = networkRef.current?.getNodeAt(params.pointer.DOM);
+                    const edgeId = networkRef.current?.getEdgeAt(params.pointer.DOM);
+
+                    if (nodeId) {
+                        setContextMenu({
+                            x: params.event.pageX,
+                            y: params.event.pageY,
+                            type: 'node',
+                            data: { id: nodeId }
+                        });
+                    } else if (edgeId) {
+                        const edge = ((networkRef.current as any).body.data.edges as DataSet<any>).get(edgeId);
+                        if (edge) {
+                            setContextMenu({
+                                x: params.event.pageX,
+                                y: params.event.pageY,
+                                type: 'edge',
+                                data: edge
+                            });
+                        }
+                    } else {
+                        setContextMenu(null);
+                    }
+                });
+
+                networkRef.current.on('click', () => setContextMenu(null));
+                networkRef.current.on('dragStart', () => setContextMenu(null));
+                networkRef.current.on('zoom', () => setContextMenu(null));
             } else {
                 // 如果网络实例已存在，只需更新数据
                 const network = networkRef.current;
@@ -330,6 +370,84 @@ const KnowledgeGraph: React.FC = () => {
         setSearchResults(null);
         setShowSearchResults(false);
     };
+
+    const handleAddNode = async () => {
+        if (!selectedUserId || !selectedSubgraphId || !newNodeName.trim() || !newNodeLabel.trim()) return;
+
+        try {
+            await axios.post(`/api/kg/node/${selectedUserId}`, {
+                subgraph_id: selectedSubgraphId,
+                name: newNodeName,
+                label: newNodeLabel
+            });
+            setShowAddNode(false);
+            setNewNodeName('');
+            setNewNodeLabel('');
+            fetchGraph(selectedUserId, selectedSubgraphId);
+        } catch (err) {
+            console.error("Failed to add node", err);
+            alert("添加节点失败");
+        }
+    };
+
+    const handleAddRelationship = async () => {
+        if (!selectedUserId || !selectedSubgraphId || !newRelFrom || !newRelTo || !newRelType.trim()) return;
+
+        try {
+            await axios.post(`/api/kg/relationship/${selectedUserId}`, {
+                subgraph_id: selectedSubgraphId,
+                from_node: newRelFrom,
+                to_node: newRelTo,
+                relationship_type: newRelType
+            });
+            setShowAddRelationship(false);
+            setNewRelFrom('');
+            setNewRelTo('');
+            setNewRelType('');
+            fetchGraph(selectedUserId, selectedSubgraphId);
+        } catch (err) {
+            console.error("Failed to add relationship", err);
+            alert("添加关系失败");
+        }
+    };
+
+    const handleDeleteNode = async (nodeId: string) => {
+        if (!selectedUserId || !selectedSubgraphId) return;
+        if (!confirm("确定要删除此节点吗？这将同时删除连接的所有关系。")) return;
+
+        try {
+            await axios.delete(`/api/kg/node/${selectedUserId}/${encodeURIComponent(nodeId)}`, {
+                params: { subgraph_id: selectedSubgraphId }
+            });
+            setContextMenu(null);
+            fetchGraph(selectedUserId, selectedSubgraphId);
+        } catch (err) {
+            console.error("Failed to delete node", err);
+            alert("删除节点失败");
+        }
+    };
+
+    const handleDeleteRelationship = async (rel: any) => {
+        if (!selectedUserId || !selectedSubgraphId) return;
+        if (!confirm("确定要删除此关系吗？")) return;
+
+        try {
+            await axios.delete(`/api/kg/relationship/${selectedUserId}`, {
+                params: {
+                    subgraph_id: selectedSubgraphId,
+                    from_node: rel.from,
+                    to_node: rel.to,
+                    relationship_type: rel.label || rel.type
+                }
+            });
+            setContextMenu(null);
+            fetchGraph(selectedUserId, selectedSubgraphId);
+        } catch (err) {
+            console.error("Failed to delete relationship", err);
+            alert("删除关系失败");
+        }
+    };
+
 
 
     return (
@@ -764,6 +882,20 @@ const KnowledgeGraph: React.FC = () => {
                                     </>
                                 )}
                             </button>
+                            <button
+                                onClick={() => setShowAddNode(true)}
+                                className="px-3 py-2 bg-green-600 hover:bg-green-500 rounded-lg transition-colors flex items-center justify-center"
+                                title="添加节点"
+                            >
+                                <PlusCircle className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => setShowAddRelationship(true)}
+                                className="px-3 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg transition-colors flex items-center justify-center"
+                                title="添加关系"
+                            >
+                                <Share2 className="w-4 h-4" />
+                            </button>
                         </div>
 
                         {/* Search Results Info */}
@@ -778,6 +910,122 @@ const KnowledgeGraph: React.FC = () => {
                                     <span className="ml-2 text-xs text-gray-400">（点击查看详情）</span>
                                 </p>
                             </button>
+                        )}
+
+                        {/* Add Node Modal */}
+                        {showAddNode && (
+                            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                                <div className="bg-gray-800 rounded-2xl w-full max-w-md border border-gray-700 p-6 shadow-2xl">
+                                    <h3 className="text-lg font-semibold mb-4 text-white">添加节点</h3>
+                                    <div className="space-y-4">
+                                        <div className="space-y-1">
+                                            <label className="text-sm text-gray-400">节点名称</label>
+                                            <input
+                                                type="text"
+                                                value={newNodeName}
+                                                onChange={(e) => setNewNodeName(e.target.value)}
+                                                placeholder="例如: 张三"
+                                                className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-sm text-gray-400">节点类型</label>
+                                            <input
+                                                type="text"
+                                                value={newNodeLabel}
+                                                onChange={(e) => setNewNodeLabel(e.target.value)}
+                                                placeholder="例如: Person"
+                                                className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                                            />
+                                        </div>
+                                        <div className="flex justify-end gap-3 pt-2">
+                                            <button onClick={() => setShowAddNode(false)} className="px-4 py-2 text-gray-400 hover:text-white transition-colors">取消</button>
+                                            <button onClick={handleAddNode} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors">创建</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Add Relationship Modal */}
+                        {showAddRelationship && (
+                            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                                <div className="bg-gray-800 rounded-2xl w-full max-w-md border border-gray-700 p-6 shadow-2xl">
+                                    <h3 className="text-lg font-semibold mb-4 text-white">添加关系</h3>
+                                    <div className="space-y-4">
+                                        <div className="space-y-1">
+                                            <label className="text-sm text-gray-400">起始节点</label>
+                                            <select
+                                                value={newRelFrom}
+                                                onChange={(e) => setNewRelFrom(e.target.value)}
+                                                className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                                            >
+                                                <option value="">选择起始节点</option>
+                                                {graphData?.nodes.map((node: any) => (
+                                                    <option key={node.id} value={node.id}>{node.name || node.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-sm text-gray-400">目标节点</label>
+                                            <select
+                                                value={newRelTo}
+                                                onChange={(e) => setNewRelTo(e.target.value)}
+                                                className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                                            >
+                                                <option value="">选择目标节点</option>
+                                                {graphData?.nodes.map((node: any) => (
+                                                    <option key={node.id} value={node.id}>{node.name || node.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-sm text-gray-400">关系类型</label>
+                                            <input
+                                                type="text"
+                                                value={newRelType}
+                                                onChange={(e) => setNewRelType(e.target.value)}
+                                                placeholder="例如: KNOWS"
+                                                className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                                            />
+                                        </div>
+                                        <div className="flex justify-end gap-3 pt-2">
+                                            <button onClick={() => setShowAddRelationship(false)} className="px-4 py-2 text-gray-400 hover:text-white transition-colors">取消</button>
+                                            <button onClick={handleAddRelationship} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors">创建</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Context Menu */}
+                        {contextMenu && (
+                            <div
+                                className="fixed z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[140px]"
+                                style={{ left: contextMenu.x, top: contextMenu.y }}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="px-3 py-1.5 text-xs text-gray-500 border-b border-gray-700 mb-1">
+                                    {contextMenu.type === 'node' ? '节点操作' : '关系操作'}
+                                </div>
+                                {contextMenu.type === 'node' ? (
+                                    <button
+                                        onClick={() => handleDeleteNode(contextMenu.data.id)}
+                                        className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-700 flex items-center gap-2 transition-colors"
+                                    >
+                                        <Trash className="w-4 h-4" />
+                                        删除节点
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={() => handleDeleteRelationship(contextMenu.data)}
+                                        className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-700 flex items-center gap-2 transition-colors"
+                                    >
+                                        <Trash className="w-4 h-4" />
+                                        删除关系
+                                    </button>
+                                )}
+                            </div>
                         )}
 
                         <div ref={networkContainer} className="w-full h-full cursor-move" />

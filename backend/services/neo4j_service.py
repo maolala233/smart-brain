@@ -225,6 +225,39 @@ class Neo4jService:
                 "nodes": nodes,
                 "relationships": relationships
             }
+    
+    def delete_node(self, user_id: int, subgraph_id: int, node_id: str):
+        """Delete a single node from the knowledge graph"""
+        with self.driver.session() as session:
+            result = session.run(
+                "MATCH (n {id: $id, user_id: $user_id, subgraph_id: $subgraph_id}) DETACH DELETE n RETURN count(n) as deleted",
+                id=node_id,
+                user_id=user_id,
+                subgraph_id=subgraph_id
+            )
+            deleted_count = result.single()["deleted"]
+            logger.info(f"Deleted node {node_id} for user {user_id}, subgraph {subgraph_id}")
+            return deleted_count
+    
+    def delete_relationship(self, user_id: int, subgraph_id: int, from_node: str, to_node: str, relationship_type: str):
+        """Delete a specific relationship from the knowledge graph"""
+        with self.driver.session() as session:
+            result = session.run(
+                f"""
+                MATCH (a {{id: $from_id, user_id: $user_id, subgraph_id: $subgraph_id}})
+                      -[r:{relationship_type}]->
+                      (b {{id: $to_id, user_id: $user_id, subgraph_id: $subgraph_id}})
+                DELETE r
+                RETURN count(r) as deleted
+                """,
+                from_id=from_node,
+                to_id=to_node,
+                user_id=user_id,
+                subgraph_id=subgraph_id
+            )
+            deleted_count = result.single()["deleted"]
+            logger.info(f"Deleted relationship {from_node}-[{relationship_type}]->{to_node} for user {user_id}, subgraph {subgraph_id}")
+            return deleted_count
 
 # Global instance
 neo4j_service = Neo4jService()
