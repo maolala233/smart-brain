@@ -12,7 +12,8 @@ const MainLayout: React.FC = () => {
     return (
         <div className="min-h-screen bg-gray-900 text-white font-sans">
             <nav className="fixed top-0 left-0 right-0 bg-gray-800/80 backdrop-blur-md border-b border-gray-700 z-50">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                {/* 👇 修改这里：把 max-w-7xl mx-auto 改为 w-full */}
+                <div className="w-full px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between h-16">
                         <div className="flex items-center">
                             <Link to="/" className="flex items-center space-x-2">
@@ -45,6 +46,7 @@ const MainLayout: React.FC = () => {
                 </div>
             </nav>
 
+            {/* 👇 这里的 w-full 已经是正确的了，不需要动 */}
             <main className="w-full pt-16 min-h-screen">
                 <Outlet />
             </main>

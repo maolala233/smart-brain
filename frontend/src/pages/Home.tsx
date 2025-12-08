@@ -98,7 +98,7 @@ const Home: React.FC = () => {
                         {
                             icon: <Brain className="w-8 h-8 text-green-400" />,
                             title: "知识内化",
-                            desc: "构建个人知识图谱，让数字员工拥有您的专业经验与业务洞察。"
+                            desc: "构建个人知识图谱，让智慧员工拥有您的专业经验与业务洞察。"
                         }
                     ].map((feature, index) => (
                         <motion.div
