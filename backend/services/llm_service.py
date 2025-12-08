@@ -156,3 +156,65 @@ def generate_logic_test_questions():
     except Exception as e:
         print(f"Error generating questions: {e}")
         return []
+
+def generate_smart_qa_response(query: str, persona: dict, graph_context: dict) -> str:
+    """
+    Generate a response to a user query based on persona and graph context.
+    
+    Args:
+        query: The user's question
+        persona: Dict containing 'tone' and 'logic'
+        graph_context: Dict containing 'nodes' and 'relationships' found in KG
+        
+    Returns:
+        Generated response string
+    """
+    
+    # Format graph context for prompt
+    nodes_text = ", ".join([f"{n.get('name')} ({n.get('label')})" for n in graph_context.get('nodes', [])])
+    rels_text = ", ".join([f"{r.get('from_name')} -[{r.get('type')}]-> {r.get('to_name')}" for r in graph_context.get('relationships', [])])
+    
+    if not nodes_text:
+        context_text = "未找到相关的知识图谱数据。"
+    else:
+        context_text = f"相关节点: {nodes_text}\n相关关系: {rels_text}"
+        
+    system_prompt = f"""
+    你现在是基于以下用户画像构建的“智慧员工”：
+    
+    【用户画像】
+    - 语言风格/语气: {persona.get('tone', '正常')}
+    - 思维逻辑: {persona.get('logic', '正常')}
+    
+    【知识库上下文】
+    以下是检索到的相关知识图谱数据：
+    {context_text}
+    
+    请根据用户的提问，结合你的【思维逻辑】进行思考，并使用你的【语言风格】进行回答。
+    回答要求：
+    1. 必须基于知识库上下文回答，如果上下文中没有相关信息，请诚实说明。
+    2. 严格模仿画像的语气和用词习惯。
+    3. 展示你的推演过程（如果画像逻辑包含具体思维链）。
+    """
+    
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    data = {
+        "model": MODEL_MAIN,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": query}
+        ],
+        "temperature": 0.7 # Slight creatinine for persona style
+    }
+    
+    try:
+        response = requests.post(f"{BASE_URL}/chat/completions", headers=headers, json=data)
+        response.raise_for_status()
+        return response.json()['choices'][0]['message']['content']
+    except Exception as e:
+        print(f"Smart QA Error: {e}")
+        return "抱歉，我现在无法思考（服务连接失败）。"

@@ -427,3 +427,52 @@ def delete_relationship(
     except Exception as e:
         logger.error(f"Error deleting relationship: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+class SmartQARequest(BaseModel):
+    query: str
+    subgraph_ids: List[int]
+
+@router.post("/smart-qa/{user_id}")
+def smart_qa_chat(
+    user_id: int,
+    request: SmartQARequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Smart QA Chat using User Persona and Knowledge Graph
+    """
+    if not request.query or not request.query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+    
+    if not request.subgraph_ids:
+        raise HTTPException(status_code=400, detail="At least one subgraph must be selected")
+        
+    try:
+        # 1. Fetch User Persona
+        from models import EmployeePersona
+        from services.llm_service import generate_smart_qa_response
+        
+        persona = db.query(EmployeePersona).filter(EmployeePersona.user_id == user_id).first()
+        if not persona:
+            # Fallback for user without persona
+            persona_data = {"tone": "正常", "logic": "正常"}
+        else:
+            persona_data = {
+                "tone": persona.extracted_tone_style or "正常",
+                "logic": persona.extracted_positive_logic or persona.base_logic_type or "正常"
+            }
+            
+        # 2. Search Knowledge Graph (Multi-Subgraph)
+        search_results = neo4j_service.search_graph_multi(user_id, request.subgraph_ids, request.query)
+        
+        # 3. Generate Response via LLM
+        answer = generate_smart_qa_response(request.query, persona_data, search_results)
+        
+        return {
+            "answer": answer,
+            "context": search_results
+        }
+        
+    except Exception as e:
+        logger.error(f"Smart QA Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

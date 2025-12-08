@@ -173,26 +173,35 @@ class Neo4jService:
     
     def search_graph(self, user_id: int, subgraph_id: int, query: str) -> Dict[str, Any]:
         """
-        Search for nodes and relationships matching the query
-        Returns nodes and relationships that match the search term
+        Search for nodes and relationships matching the query in a single subgraph
+        """
+        return self.search_graph_multi(user_id, [subgraph_id], query)
+
+    def search_graph_multi(self, user_id: int, subgraph_ids: List[int], query: str) -> Dict[str, Any]:
+        """
+        Search for nodes and relationships matching the query across multiple subgraphs
         """
         with self.driver.session() as session:
             # Search nodes by name or id (case-insensitive)
+            # Use IN clause for subgraph_ids
             nodes_result = session.run(
                 """
-                MATCH (n {user_id: $user_id, subgraph_id: $subgraph_id})
-                WHERE toLower(n.name) CONTAINS toLower($search_term) OR toLower(n.id) CONTAINS toLower($search_term)
-                RETURN n.id as id, labels(n)[0] as label, n.name as name
+                MATCH (n)
+                WHERE n.user_id = $user_id 
+                  AND n.subgraph_id IN $subgraph_ids
+                  AND (toLower(n.name) CONTAINS toLower($search_term) OR toLower(n.id) CONTAINS toLower($search_term))
+                RETURN n.id as id, labels(n)[0] as label, n.name as name, n.subgraph_id as subgraph_id
                 """,
                 user_id=user_id,
-                subgraph_id=subgraph_id,
+                subgraph_ids=subgraph_ids,
                 search_term=query
             )
             nodes = [
                 {
                     "id": record["id"],
                     "label": record["label"],
-                    "name": record["name"]
+                    "name": record["name"],
+                    "subgraph_id": record["subgraph_id"]
                 }
                 for record in nodes_result
             ]
@@ -200,12 +209,14 @@ class Neo4jService:
             # Search relationships by type (case-insensitive) - include node names
             rels_result = session.run(
                 """
-                MATCH (a {user_id: $user_id, subgraph_id: $subgraph_id})-[r]->(b {user_id: $user_id, subgraph_id: $subgraph_id})
-                WHERE toLower(type(r)) CONTAINS toLower($search_term)
-                RETURN a.id as from_id, a.name as from_name, type(r) as type, b.id as to_id, b.name as to_name
+                MATCH (a)-[r]->(b)
+                WHERE a.user_id = $user_id AND b.user_id = $user_id
+                  AND a.subgraph_id IN $subgraph_ids AND b.subgraph_id IN $subgraph_ids
+                  AND toLower(type(r)) CONTAINS toLower($search_term)
+                RETURN a.id as from_id, a.name as from_name, type(r) as type, b.id as to_id, b.name as to_name, a.subgraph_id as subgraph_id
                 """,
                 user_id=user_id,
-                subgraph_id=subgraph_id,
+                subgraph_ids=subgraph_ids,
                 search_term=query
             )
             relationships = [
@@ -214,12 +225,13 @@ class Neo4jService:
                     "from_name": record["from_name"],
                     "to": record["to_id"],
                     "to_name": record["to_name"],
-                    "type": record["type"]
+                    "type": record["type"],
+                    "subgraph_id": record["subgraph_id"]
                 }
                 for record in rels_result
             ]
             
-            logger.info(f"Search for '{query}' in user {user_id}, subgraph {subgraph_id}: found {len(nodes)} nodes, {len(relationships)} relationships")
+            logger.info(f"Search for '{query}' in user {user_id}, subgraphs {subgraph_ids}: found {len(nodes)} nodes, {len(relationships)} relationships")
             
             return {
                 "nodes": nodes,
