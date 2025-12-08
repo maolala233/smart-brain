@@ -49,6 +49,8 @@ const KnowledgeGraph: React.FC = () => {
     const [newRelFrom, setNewRelFrom] = useState('');
     const [newRelTo, setNewRelTo] = useState('');
     const [newRelType, setNewRelType] = useState('');
+    const [fromNodeSearch, setFromNodeSearch] = useState('');
+    const [toNodeSearch, setToNodeSearch] = useState('');
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, type: 'node' | 'edge', data: any } | null>(null);
 
     const networkContainer = useRef<HTMLDivElement>(null);
@@ -955,30 +957,116 @@ const KnowledgeGraph: React.FC = () => {
                                     <div className="space-y-4">
                                         <div className="space-y-1">
                                             <label className="text-sm text-gray-400">起始节点</label>
-                                            <select
-                                                value={newRelFrom}
-                                                onChange={(e) => setNewRelFrom(e.target.value)}
-                                                className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
-                                            >
-                                                <option value="">选择起始节点</option>
-                                                {graphData?.nodes.map((node: any) => (
-                                                    <option key={node.id} value={node.id}>{node.name || node.label}</option>
-                                                ))}
-                                            </select>
+                                            <div className="relative">
+                                                <input
+                                                    type="text"
+                                                    value={fromNodeSearch}
+                                                    onChange={(e) => setFromNodeSearch(e.target.value)}
+                                                    placeholder="搜索起始节点..."
+                                                    className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                                                />
+                                                {fromNodeSearch && (
+                                                    <button 
+                                                        onClick={() => setFromNodeSearch('')}
+                                                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="max-h-40 overflow-y-auto border border-gray-700 rounded-lg mt-1">
+                                                {graphData?.nodes
+                                                    .filter((node: any) => 
+                                                        node.name?.toLowerCase().includes(fromNodeSearch.toLowerCase()) ||
+                                                        node.label?.toLowerCase().includes(fromNodeSearch.toLowerCase())
+                                                    )
+                                                    .map((node: any) => (
+                                                        <div
+                                                            key={node.id}
+                                                            onClick={() => {
+                                                                setNewRelFrom(node.id);
+                                                                setFromNodeSearch(node.name || node.label);
+                                                            }}
+                                                            className={`px-4 py-2 cursor-pointer hover:bg-gray-700 ${
+                                                                newRelFrom === node.id ? 'bg-gray-700' : ''
+                                                            }`}
+                                                        >
+                                                            <div className="text-white">{node.name || node.label}</div>
+                                                            <div className="text-xs text-gray-400">{node.label}</div>
+                                                        </div>
+                                                    ))
+                                                }
+                                                {fromNodeSearch && graphData?.nodes.filter((node: any) => 
+                                                    node.name?.toLowerCase().includes(fromNodeSearch.toLowerCase()) ||
+                                                    node.label?.toLowerCase().includes(fromNodeSearch.toLowerCase())
+                                                ).length === 0 && (
+                                                    <div className="px-4 py-2 text-gray-500">未找到匹配节点</div>
+                                                )}
+                                            </div>
+                                            {newRelFrom && (
+                                                <div className="text-sm text-gray-400 mt-1">
+                                                    已选择: {graphData?.nodes.find((n: any) => n.id === newRelFrom)?.name || 
+                                                             graphData?.nodes.find((n: any) => n.id === newRelFrom)?.label}
+                                                </div>
+                                            )}
                                         </div>
+                                        
                                         <div className="space-y-1">
                                             <label className="text-sm text-gray-400">目标节点</label>
-                                            <select
-                                                value={newRelTo}
-                                                onChange={(e) => setNewRelTo(e.target.value)}
-                                                className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
-                                            >
-                                                <option value="">选择目标节点</option>
-                                                {graphData?.nodes.map((node: any) => (
-                                                    <option key={node.id} value={node.id}>{node.name || node.label}</option>
-                                                ))}
-                                            </select>
+                                            <div className="relative">
+                                                <input
+                                                    type="text"
+                                                    value={toNodeSearch}
+                                                    onChange={(e) => setToNodeSearch(e.target.value)}
+                                                    placeholder="搜索目标节点..."
+                                                    className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                                                />
+                                                {toNodeSearch && (
+                                                    <button 
+                                                        onClick={() => setToNodeSearch('')}
+                                                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="max-h-40 overflow-y-auto border border-gray-700 rounded-lg mt-1">
+                                                {graphData?.nodes
+                                                    .filter((node: any) => 
+                                                        node.name?.toLowerCase().includes(toNodeSearch.toLowerCase()) ||
+                                                        node.label?.toLowerCase().includes(toNodeSearch.toLowerCase())
+                                                    )
+                                                    .map((node: any) => (
+                                                        <div
+                                                            key={node.id}
+                                                            onClick={() => {
+                                                                setNewRelTo(node.id);
+                                                                setToNodeSearch(node.name || node.label);
+                                                            }}
+                                                            className={`px-4 py-2 cursor-pointer hover:bg-gray-700 ${
+                                                                newRelTo === node.id ? 'bg-gray-700' : ''
+                                                            }`}
+                                                        >
+                                                            <div className="text-white">{node.name || node.label}</div>
+                                                            <div className="text-xs text-gray-400">{node.label}</div>
+                                                        </div>
+                                                    ))
+                                                }
+                                                {toNodeSearch && graphData?.nodes.filter((node: any) => 
+                                                    node.name?.toLowerCase().includes(toNodeSearch.toLowerCase()) ||
+                                                    node.label?.toLowerCase().includes(toNodeSearch.toLowerCase())
+                                                ).length === 0 && (
+                                                    <div className="px-4 py-2 text-gray-500">未找到匹配节点</div>
+                                                )}
+                                            </div>
+                                            {newRelTo && (
+                                                <div className="text-sm text-gray-400 mt-1">
+                                                    已选择: {graphData?.nodes.find((n: any) => n.id === newRelTo)?.name || 
+                                                             graphData?.nodes.find((n: any) => n.id === newRelTo)?.label}
+                                                </div>
+                                            )}
                                         </div>
+                                        
                                         <div className="space-y-1">
                                             <label className="text-sm text-gray-400">关系类型</label>
                                             <input
@@ -990,8 +1078,22 @@ const KnowledgeGraph: React.FC = () => {
                                             />
                                         </div>
                                         <div className="flex justify-end gap-3 pt-2">
-                                            <button onClick={() => setShowAddRelationship(false)} className="px-4 py-2 text-gray-400 hover:text-white transition-colors">取消</button>
-                                            <button onClick={handleAddRelationship} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors">创建</button>
+                                            <button onClick={() => {
+                                                setShowAddRelationship(false);
+                                                setFromNodeSearch('');
+                                                setToNodeSearch('');
+                                                setNewRelFrom('');
+                                                setNewRelTo('');
+                                            }} className="px-4 py-2 text-gray-400 hover:text-white transition-colors">
+                                                取消
+                                            </button>
+                                            <button 
+                                                onClick={handleAddRelationship} 
+                                                disabled={!newRelFrom || !newRelTo || !newRelType.trim()}
+                                                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-lg text-white transition-colors"
+                                            >
+                                                创建
+                                            </button>
                                         </div>
                                     </div>
                                 </div>

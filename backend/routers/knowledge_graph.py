@@ -314,8 +314,8 @@ def undo_last_operation(subgraph_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Undo error: {e}")
         raise HTTPException(status_code=500, detail=f"Undo failed: {str(e)}")
- 
- @router.post("/node/{user_id}")
+
+@router.post("/node/{user_id}")
 def create_node(
     user_id: int,
     subgraph_id: int = Body(...),
