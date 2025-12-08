@@ -98,7 +98,9 @@ const Home: React.FC = () => {
                             transition={{ delay: 0.2 + index * 0.1 }}
                             className="bg-gray-800/30 backdrop-blur-md p-8 rounded-2xl border border-gray-700 hover:bg-gray-800/50 transition-colors"
                         >
-                            <div className="mb-4 p-3 bg-gray-900/50 rounded-xl w-fit">{feature.icon}</div>
+                            <div className="mb-4 p-4 w-fit mx-auto flex items-center justify-center">
+                                {feature.icon}
+                            </div>
                             <h3 className="text-xl font-bold mb-2">{feature.title}</h3>
                             <p className="text-gray-400">{feature.desc}</p>
                         </motion.div>
