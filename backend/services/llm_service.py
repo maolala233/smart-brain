@@ -157,7 +157,7 @@ def generate_logic_test_questions():
         print(f"Error generating questions: {e}")
         return []
 
-def generate_smart_qa_response(query: str, persona: dict, graph_context: dict) -> str:
+def generate_smart_qa_response(query: str, persona: dict, graph_context: dict, history: list = None) -> str:
     """
     Generate a response to a user query based on persona and graph context.
     
@@ -165,6 +165,7 @@ def generate_smart_qa_response(query: str, persona: dict, graph_context: dict) -
         query: The user's question
         persona: Dict containing 'tone' and 'logic'
         graph_context: Dict containing 'nodes' and 'relationships' found in KG
+        history: List of previous messages
         
     Returns:
         Generated response string
@@ -208,10 +209,14 @@ def generate_smart_qa_response(query: str, persona: dict, graph_context: dict) -
     {strategies_text}
     
     请根据用户的提问，结合你的【思维逻辑】进行思考，并使用你的【语言风格】进行回答。
-    回答要求：
-    1. 必须基于知识库上下文回答，如果上下文中没有相关信息，请诚实说明。
-    2. 严格模仿画像的语气和用词习惯。
-    3. 展示你的推演过程（如果画像逻辑包含具体思维链）。
+    
+    **关键规则 - 必须严格遵守**：
+    1. **如果在【知识库上下文】中没有找到有效信息（即上下文为空或只包含"未找到..."），请直接明确告知用户系统内查询不到相关信息。**
+       - 此时请**不要**尝试编造答案，也不要使用通用知识回答。
+       - 请用符合你【语言风格】的语气表达歉意，并建议用户："系统知识库中暂无此记录，请尝试更换关键词或确认数据是否已录入。"
+    
+    2. 只有在【知识库上下文】中有内容时，才进行逻辑推演和个性化回答。
+    3. 严格模仿画像的语气和用词习惯。
     4. 如果有多条相关信息，优先使用匹配度更高的（exact > partial > label）。
     """
     
@@ -220,12 +225,22 @@ def generate_smart_qa_response(query: str, persona: dict, graph_context: dict) -
         "Content-Type": "application/json"
     }
     
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Add history messages if available
+    if history:
+        # Normalize history format to match API requirements
+        # Limit to last 5 messages to avoid token overflow
+        for msg in history[-5:]:
+            role = "user" if msg.get("role") == "user" else "assistant"
+            messages.append({"role": role, "content": msg.get("content", "")})
+            
+    # Add current query
+    messages.append({"role": "user", "content": query})
+    
     data = {
         "model": MODEL_MAIN,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": query}
-        ],
+        "messages": messages,
         "temperature": 0.7 # Slight creatinine for persona style
     }
     
@@ -310,29 +325,50 @@ def generate_search_queries(query: str, persona: dict) -> list:
         return [search_term]
 
 
-def generate_search_strategies(query: str, persona: dict) -> list:
+def generate_search_strategies(query: str, persona: dict, history: list = None) -> list:
     """
-    Generate multiple search strategies based on user question and persona
+    Generate multiple search strategies based on user question and persona, considering conversation history.
     
     Args:
         query: The user's question
         persona: Dict containing 'tone' and 'logic'
+        history: List of conversation messages [{"role": "user/ai", "content": "..."}]
         
     Returns:
         List of search strategy dictionaries with query and description
     """
     
+    # Format history for context
+    history_text = ""
+    if history:
+        history_text = "\n【对话历史】\n"
+        for msg in history[-3:]: # Limit to last 3
+            role = "用户" if msg.get("role") == "user" else "AI"
+            history_text += f"{role}: {msg.get('content')}\n"
+    
     system_prompt = f"""
-    你是一个知识图谱检索策略专家。你的任务是根据用户的提问和用户画像，生成多种不同的检索策略，
-    以最大化找到相关节点和关系的可能性。
+    你是一个知识图谱检索策略专家。你的任务是根据用户的提问和用户画像（特别是其【思维逻辑】），
+    推导出最符合该思维逻辑的检索线索（Logical Search Concepts）。
     
     【用户画像】
     - 语言风格/语气: {persona.get('tone', '正常')}
     - 思维逻辑: {persona.get('logic', '正常')}
     
-    请分析用户的提问，结合用户画像，生成3-6种不同的检索策略。每种策略应包含：
-    1. 一个具体的检索关键词
-    2. 该策略的简要说明（为何这种检索方式可能有效）
+    {history_text}
+    
+    请严格按照该用户的【思维逻辑】来拆解问题，生成3-6种检索策略。
+    
+    **关键任务**: 
+    1. **指代消解**: 如果用户的问题包含代词（如"它"、"这个人"、"那件事"），请根据【对话历史】将其还原为具体的实体名称。
+    2. **逻辑推断**: 根据用户画像的思维逻辑，推断需要查找的底层概念。
+    
+    例如：
+    - 如果历史中在讨论"SpaceX"，当用户问"它的创始人是谁？"，检索词应包含"SpaceX 创始人"而不是"它 创始人"。
+    - 如果逻辑是"第一性原理" -> 检索"组成要素"、"物理定义"、"核心假设"。
+    
+    每种策略应包含：
+    1. 一个具体的检索关键词（必须是具体的实体名或概念名，不能包含代词）
+    2. 该策略的简要说明（解释该关键词如何服务于该思维逻辑）
     
     回答要求：
     1. 直接返回一个纯JSON数组，不要包含其他文字或格式符号
@@ -343,8 +379,8 @@ def generate_search_strategies(query: str, persona: dict) -> list:
     
     示例输出格式：
     [
-      {{"query": "关键词1", "description": "策略1说明"}},
-      {{"query": "关键词2", "description": "策略2说明"}}
+      {{"query": "核心定义", "description": "基于第一性原理，首先确认核心概念的物理定义"}},
+      {{"query": "SpaceX 历史", "description": "结合上文，查找SpaceX的发展脉络"}}
     ]
     """
     
