@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, User, Share2, Send, Bot, CheckCircle, Circle, ArrowLeft, Loader2 } from 'lucide-react';
 
@@ -21,17 +21,24 @@ interface KnowledgeSubgraph {
     created_at: string;
 }
 
+interface Message {
+    id: string;
+    type: 'user' | 'ai';
+    content: string;
+}
+
 const SmartQA: React.FC = () => {
     const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
     const [selectedUser, setSelectedUser] = useState<number | null>(null);
     const [subgraphs, setSubgraphs] = useState<KnowledgeSubgraph[]>([]);
     const [selectedSubgraphs, setSelectedSubgraphs] = useState<number[]>([]);
     const [question, setQuestion] = useState('');
-    const [answer, setAnswer] = useState('');
+    const [messages, setMessages] = useState<Message[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
     const navigate = useNavigate();
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     // 获取所有用户画像
     useEffect(() => {
@@ -91,9 +98,19 @@ const SmartQA: React.FC = () => {
             return;
         }
 
+        // 添加用户消息到对话历史
+        const userMessage: Message = {
+            id: Date.now().toString(),
+            type: 'user',
+            content: question
+        };
+        
+        setMessages(prev => [...prev, userMessage]);
         setIsLoading(true);
         setError('');
-        setAnswer('');
+        
+        const currentQuestion = question;
+        setQuestion('');
 
         try {
             const response = await fetch(`/api/kg/smart-qa/${selectedUser}`, {
@@ -102,14 +119,20 @@ const SmartQA: React.FC = () => {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    query: question,
+                    query: currentQuestion,
                     subgraph_ids: selectedSubgraphs,
                 }),
             });
 
             if (response.ok) {
                 const data = await response.json();
-                setAnswer(data.answer);
+                // 添加AI回复到对话历史
+                const aiMessage: Message = {
+                    id: (Date.now() + 1).toString(),
+                    type: 'ai',
+                    content: data.answer
+                };
+                setMessages(prev => [...prev, aiMessage]);
             } else {
                 const errorData = await response.json();
                 setError(errorData.detail || '问答处理失败');
@@ -120,6 +143,16 @@ const SmartQA: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (!isLoading && question.trim() && selectedUser && selectedSubgraphs.length > 0) {
+                handleSubmit(e as any);
+            }
+        }
+        // Shift+Enter 默认行为就是换行，不需要额外处理
     };
 
     return (
@@ -231,26 +264,58 @@ const SmartQA: React.FC = () => {
                         <div className="flex-1 bg-gray-900/50 rounded-2xl border border-gray-700 p-6 overflow-y-auto shadow-inner relative">
                             <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
                                 <Bot className="w-5 h-5 text-green-400" />
-                                AI 回答
+                                对话记录
                             </h2>
 
-                            {isLoading ? (
-                                <div className="absolute inset-0 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm rounded-2xl">
-                                    <div className="flex flex-col items-center gap-3">
-                                        <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
-                                        <span className="text-gray-400">正在思考并检索知识库...</span>
-                                    </div>
-                                </div>
-                            ) : answer ? (
-                                <div className="prose prose-invert max-w-none">
-                                    <div className="whitespace-pre-wrap leading-relaxed text-gray-200">
-                                        {answer}
-                                    </div>
-                                </div>
-                            ) : (
+                            {messages.length === 0 && !isLoading ? (
                                 <div className="h-full flex flex-col items-center justify-center text-gray-500">
                                     <Bot className="w-16 h-16 mb-4 opacity-20" />
                                     <p>请在左侧配置参数，并在下方输入问题</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {messages.map((message) => (
+                                        <div 
+                                            key={message.id} 
+                                            className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                                        >
+                                            <div 
+                                                className={`max-w-3xl rounded-2xl px-4 py-3 ${
+                                                    message.type === 'user' 
+                                                        ? 'bg-blue-600/20 border border-blue-500/30' 
+                                                        : 'bg-gray-800/50 border border-gray-700'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    {message.type === 'user' ? (
+                                                        <User className="w-4 h-4 text-blue-400" />
+                                                    ) : (
+                                                        <Bot className="w-4 h-4 text-green-400" />
+                                                    )}
+                                                    <span className="text-xs font-medium">
+                                                        {message.type === 'user' ? '你' : 'AI助手'}
+                                                    </span>
+                                                </div>
+                                                <div className="whitespace-pre-wrap leading-relaxed text-gray-200">
+                                                    {message.content}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {isLoading && (
+                                        <div className="flex justify-start">
+                                            <div className="max-w-3xl rounded-2xl px-4 py-3 bg-gray-800/50 border border-gray-700">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <Bot className="w-4 h-4 text-green-400" />
+                                                    <span className="text-xs font-medium">AI助手</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                                                    <span className="text-gray-400">正在思考并检索知识库...</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -263,9 +328,11 @@ const SmartQA: React.FC = () => {
                             </h2>
                             <form onSubmit={handleSubmit} className="flex-1 flex flex-col">
                                 <textarea
+                                    ref={textareaRef}
                                     value={question}
                                     onChange={(e) => setQuestion(e.target.value)}
-                                    placeholder="请输入您的问题..."
+                                    onKeyDown={handleKeyDown}
+                                    placeholder="请输入您的问题...&#10;Enter发送，Shift+Enter换行"
                                     className="flex-1 w-full bg-gray-900/50 rounded-xl p-3 resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-600/50 text-white placeholder-gray-500"
                                     disabled={isLoading}
                                 />
