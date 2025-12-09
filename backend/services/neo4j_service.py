@@ -238,6 +238,255 @@ class Neo4jService:
                 "relationships": relationships
             }
     
+    def search_graph_comprehensive(self, user_id: int, subgraph_ids: List[int], query: str) -> Dict[str, Any]:
+        """
+        Comprehensive search for nodes and relationships with multiple strategies:
+        1. Exact match by name/id
+        2. Partial match by name/id
+        3. Match by label
+        4. Match relationships by type
+        5. Find related nodes and relationships
+        6. Fuzzy match by name (Levenshtein distance)
+        """
+        with self.driver.session() as session:
+            all_nodes = []
+            all_relationships = []
+            processed_node_keys = set()  # To avoid duplicate nodes
+            processed_rel_keys = set()    # To avoid duplicate relationships
+            
+            # Strategy 1: Exact match by name or id
+            exact_nodes_result = session.run(
+                """
+                MATCH (n)
+                WHERE n.user_id = $user_id 
+                  AND n.subgraph_id IN $subgraph_ids
+                  AND (toLower(n.name) = toLower($search_term) OR toLower(n.id) = toLower($search_term))
+                RETURN n.id as id, labels(n)[0] as label, n.name as name, n.subgraph_id as subgraph_id
+                """,
+                user_id=user_id,
+                subgraph_ids=subgraph_ids,
+                search_term=query
+            )
+            
+            exact_node_ids = []
+            for record in exact_nodes_result:
+                node_key = (record["id"], record["subgraph_id"])
+                if node_key not in processed_node_keys:
+                    all_nodes.append({
+                        "id": record["id"],
+                        "label": record["label"],
+                        "name": record["name"],
+                        "subgraph_id": record["subgraph_id"],
+                        "match_type": "exact"
+                    })
+                    exact_node_ids.append(record["id"])
+                    processed_node_keys.add(node_key)
+            
+            # Strategy 2: Partial match by name or id
+            partial_nodes_result = session.run(
+                """
+                MATCH (n)
+                WHERE n.user_id = $user_id 
+                  AND n.subgraph_id IN $subgraph_ids
+                  AND (toLower(n.name) CONTAINS toLower($search_term) OR toLower(n.id) CONTAINS toLower($search_term))
+                  AND NOT (toLower(n.name) = toLower($search_term) OR toLower(n.id) = toLower($search_term))
+                RETURN n.id as id, labels(n)[0] as label, n.name as name, n.subgraph_id as subgraph_id
+                """,
+                user_id=user_id,
+                subgraph_ids=subgraph_ids,
+                search_term=query
+            )
+            
+            partial_node_ids = []
+            for record in partial_nodes_result:
+                node_key = (record["id"], record["subgraph_id"])
+                if node_key not in processed_node_keys:
+                    all_nodes.append({
+                        "id": record["id"],
+                        "label": record["label"],
+                        "name": record["name"],
+                        "subgraph_id": record["subgraph_id"],
+                        "match_type": "partial"
+                    })
+                    partial_node_ids.append(record["id"])
+                    processed_node_keys.add(node_key)
+            
+            # Strategy 3: Match by label
+            label_nodes_result = session.run(
+                """
+                MATCH (n)
+                WHERE n.user_id = $user_id 
+                  AND n.subgraph_id IN $subgraph_ids
+                  AND toLower(labels(n)[0]) CONTAINS toLower($search_term)
+                RETURN n.id as id, labels(n)[0] as label, n.name as name, n.subgraph_id as subgraph_id
+                """,
+                user_id=user_id,
+                subgraph_ids=subgraph_ids,
+                search_term=query
+            )
+            
+            label_node_ids = []
+            for record in label_nodes_result:
+                node_key = (record["id"], record["subgraph_id"])
+                if node_key not in processed_node_keys:
+                    all_nodes.append({
+                        "id": record["id"],
+                        "label": record["label"],
+                        "name": record["name"],
+                        "subgraph_id": record["subgraph_id"],
+                        "match_type": "label"
+                    })
+                    label_node_ids.append(record["id"])
+                    processed_node_keys.add(node_key)
+            
+            # Strategy 4: Fuzzy match by name (using STARTS WITH and CONTAINS)
+            # Since APOC is not available, we'll use a simpler approach
+            fuzzy_nodes_result = session.run(
+                """
+                MATCH (n)
+                WHERE n.user_id = $user_id 
+                  AND n.subgraph_id IN $subgraph_ids
+                  AND (toLower(n.name) STARTS WITH left(toLower($search_term), 3) 
+                       OR toLower(n.name) CONTAINS left(toLower($search_term), 3))
+                RETURN n.id as id, labels(n)[0] as label, n.name as name, n.subgraph_id as subgraph_id
+                LIMIT 10
+                """,
+                user_id=user_id,
+                subgraph_ids=subgraph_ids,
+                search_term=query
+            )
+            
+            fuzzy_node_ids = []
+            for record in fuzzy_nodes_result:
+                node_key = (record["id"], record["subgraph_id"])
+                # Check if this is not already matched by other strategies
+                if node_key not in processed_node_keys:
+                    all_nodes.append({
+                        "id": record["id"],
+                        "label": record["label"],
+                        "name": record["name"],
+                        "subgraph_id": record["subgraph_id"],
+                        "match_type": "fuzzy"
+                    })
+                    fuzzy_node_ids.append(record["id"])
+                    processed_node_keys.add(node_key)
+            
+            # Collect all matched node IDs
+            all_matched_node_ids = exact_node_ids + partial_node_ids + label_node_ids + fuzzy_node_ids
+            
+            # Strategy 5: Match relationships by type (exact)
+            exact_rels_result = session.run(
+                """
+                MATCH (a)-[r]->(b)
+                WHERE a.user_id = $user_id AND b.user_id = $user_id
+                  AND a.subgraph_id IN $subgraph_ids AND b.subgraph_id IN $subgraph_ids
+                  AND toLower(type(r)) = toLower($search_term)
+                RETURN a.id as from_id, a.name as from_name, type(r) as type, b.id as to_id, b.name as to_name, a.subgraph_id as subgraph_id
+                """,
+                user_id=user_id,
+                subgraph_ids=subgraph_ids,
+                search_term=query
+            )
+            
+            for record in exact_rels_result:
+                rel_key = (record["from_id"], record["to_id"], record["type"], record["subgraph_id"])
+                if rel_key not in processed_rel_keys:
+                    all_relationships.append({
+                        "from": record["from_id"],
+                        "from_name": record["from_name"],
+                        "to": record["to_id"],
+                        "to_name": record["to_name"],
+                        "type": record["type"],
+                        "subgraph_id": record["subgraph_id"],
+                        "match_type": "exact"
+                    })
+                    processed_rel_keys.add(rel_key)
+            
+            # Strategy 6: Match relationships by type (partial)
+            partial_rels_result = session.run(
+                """
+                MATCH (a)-[r]->(b)
+                WHERE a.user_id = $user_id AND b.user_id = $user_id
+                  AND a.subgraph_id IN $subgraph_ids AND b.subgraph_id IN $subgraph_ids
+                  AND toLower(type(r)) CONTAINS toLower($search_term)
+                  AND NOT toLower(type(r)) = toLower($search_term)
+                RETURN a.id as from_id, a.name as from_name, type(r) as type, b.id as to_id, b.name as to_name, a.subgraph_id as subgraph_id
+                """,
+                user_id=user_id,
+                subgraph_ids=subgraph_ids,
+                search_term=query
+            )
+            
+            for record in partial_rels_result:
+                rel_key = (record["from_id"], record["to_id"], record["type"], record["subgraph_id"])
+                if rel_key not in processed_rel_keys:
+                    all_relationships.append({
+                        "from": record["from_id"],
+                        "from_name": record["from_name"],
+                        "to": record["to_id"],
+                        "to_name": record["to_name"],
+                        "type": record["type"],
+                        "subgraph_id": record["subgraph_id"],
+                        "match_type": "partial"
+                    })
+                    processed_rel_keys.add(rel_key)
+            
+            # Strategy 7: Find related nodes for matched nodes
+            if all_matched_node_ids:
+                related_nodes_result = session.run(
+                    """
+                    MATCH (n)-[r]-(related)
+                    WHERE n.user_id = $user_id 
+                      AND n.id IN $node_ids
+                      AND n.subgraph_id IN $subgraph_ids
+                      AND related.user_id = $user_id
+                      AND related.subgraph_id IN $subgraph_ids
+                    RETURN 
+                      n.id as source_id, n.name as source_name,
+                      related.id as related_id, related.name as related_name,
+                      head(labels(related)) as related_label,
+                      type(r) as rel_type,
+                      related.subgraph_id as subgraph_id
+                    """,
+                    user_id=user_id,
+                    node_ids=all_matched_node_ids,
+                    subgraph_ids=subgraph_ids
+                )
+                
+                for record in related_nodes_result:
+                    # Add related node
+                    node_key = (record["related_id"], record["subgraph_id"])
+                    if node_key not in processed_node_keys:
+                        all_nodes.append({
+                            "id": record["related_id"],
+                            "label": record["related_label"],
+                            "name": record["related_name"],
+                            "subgraph_id": record["subgraph_id"],
+                            "match_type": "related"
+                        })
+                        processed_node_keys.add(node_key)
+                    
+                    # Add relationship
+                    rel_key = (record["source_id"], record["related_id"], record["rel_type"], record["subgraph_id"])
+                    if rel_key not in processed_rel_keys:
+                        all_relationships.append({
+                            "from": record["source_id"],
+                            "from_name": record["source_name"],
+                            "to": record["related_id"],
+                            "to_name": record["related_name"],
+                            "type": record["rel_type"],
+                            "subgraph_id": record["subgraph_id"],
+                            "match_type": "related"
+                        })
+                        processed_rel_keys.add(rel_key)
+            
+            logger.info(f"Comprehensive search for '{query}' in user {user_id}, subgraphs {subgraph_ids}: found {len(all_nodes)} nodes, {len(all_relationships)} relationships")
+            
+            return {
+                "nodes": all_nodes,
+                "relationships": all_relationships
+            }
+    
     def delete_node(self, user_id: int, subgraph_id: int, node_id: str):
         """Delete a single node from the knowledge graph"""
         with self.driver.session() as session:

@@ -103,7 +103,7 @@ def generate_logic_test_questions():
        - 逻辑闭环能力（高 vs 低）
     
     输出格式要求：
-    请直接返回一个JSON数组，不要包含markdown格式或其他文字。
+    请直接返回一个JSON数组，不要包含代码格式或其他文字。
     数组中每个元素包含：
     - "id": 整数序号
     - "text": 题目描述（中文）
@@ -171,16 +171,32 @@ def generate_smart_qa_response(query: str, persona: dict, graph_context: dict) -
     """
     
     # Format graph context for prompt
-    nodes_text = ", ".join([f"{n.get('name')} ({n.get('label')})" for n in graph_context.get('nodes', [])])
-    rels_text = ", ".join([f"{r.get('from_name')} -[{r.get('type')}]-> {r.get('to_name')}" for r in graph_context.get('relationships', [])])
+    nodes_text = ""
+    for n in graph_context.get('nodes', []):
+        strategy_info = f" (通过策略: {n.get('strategy', '未知')})" if 'strategy' in n else ""
+        match_type_info = f" [{n.get('match_type', 'unknown')}]"
+        nodes_text += f"- {n.get('name')} ({n.get('label')}){match_type_info}{strategy_info}\n"
     
-    if not nodes_text:
+    rels_text = ""
+    for r in graph_context.get('relationships', []):
+        strategy_info = f" (通过策略: {r.get('strategy', '未知')})" if 'strategy' in r else ""
+        match_type_info = f" [{r.get('match_type', 'unknown')}]"
+        rels_text += f"- {r.get('from_name')} -[{r.get('type')}]-> {r.get('to_name')}{match_type_info}{strategy_info}\n"
+    
+    if not nodes_text and not rels_text:
         context_text = "未找到相关的知识图谱数据。"
     else:
-        context_text = f"相关节点: {nodes_text}\n相关关系: {rels_text}"
+        context_text = f"相关节点:\n{nodes_text}\n相关关系:\n{rels_text}"
         
+    # Include search strategies if available
+    strategies_text = ""
+    if "search_strategies" in graph_context:
+        strategies_text = "\n使用的检索策略:\n"
+        for i, strategy in enumerate(graph_context["search_strategies"], 1):
+            strategies_text += f"{i}. {strategy.get('query', '')} - {strategy.get('description', '')}\n"
+    
     system_prompt = f"""
-    你现在是基于以下用户画像构建的“智慧员工”：
+    你现在是基于以下用户画像构建的"智慧员工"：
     
     【用户画像】
     - 语言风格/语气: {persona.get('tone', '正常')}
@@ -189,12 +205,14 @@ def generate_smart_qa_response(query: str, persona: dict, graph_context: dict) -
     【知识库上下文】
     以下是检索到的相关知识图谱数据：
     {context_text}
+    {strategies_text}
     
     请根据用户的提问，结合你的【思维逻辑】进行思考，并使用你的【语言风格】进行回答。
     回答要求：
     1. 必须基于知识库上下文回答，如果上下文中没有相关信息，请诚实说明。
     2. 严格模仿画像的语气和用词习惯。
     3. 展示你的推演过程（如果画像逻辑包含具体思维链）。
+    4. 如果有多条相关信息，优先使用匹配度更高的（exact > partial > label）。
     """
     
     headers = {
@@ -218,3 +236,156 @@ def generate_smart_qa_response(query: str, persona: dict, graph_context: dict) -
     except Exception as e:
         print(f"Smart QA Error: {e}")
         return "抱歉，我现在无法思考（服务连接失败）。"
+
+
+def generate_search_queries(query: str, persona: dict) -> list:
+    """
+    Generate search queries based on user question and persona
+    
+    Args:
+        query: The user's question
+        persona: Dict containing 'tone' and 'logic'
+        
+    Returns:
+        List of search queries
+    """
+    
+    system_prompt = f"""
+    你是一个智能搜索查询生成器。你的任务是根据用户的提问和用户画像，生成一组最适合在知识图谱中搜索的关键词。
+    
+    【用户画像】
+    - 语言风格/语气: {persona.get('tone', '正常')}
+    - 思维逻辑: {persona.get('logic', '正常')}
+    
+    请分析用户的提问，提取其中的关键实体名称，并考虑用户画像特点，生成1-5个最有可能在知识图谱中找到相关信息的搜索关键词。
+    
+    回答要求：
+    1. 直接返回一个纯JSON数组，不要包含其他文字或格式符号
+    2. 数组中每个元素都是一个字符串形式的搜索关键词
+    3. 关键词应该简洁明了，通常是名词或专有名称
+    4. 按照重要程度排序，最重要的关键词放在前面
+    5. 可以包括同义词、相关概念等
+    
+    示例输出格式：
+    ["关键词1", "关键词2", "关键词3"]
+    """
+    
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    data = {
+        "model": MODEL_FALLBACK,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"请为以下问题生成搜索关键词：{query}"}
+        ],
+        "temperature": 0.3
+    }
+    
+    try:
+        response = requests.post(f"{BASE_URL}/chat/completions", headers=headers, json=data)
+        response.raise_for_status()
+        result = response.json()['choices'][0]['message']['content']
+        
+        # 清理可能的 Markdown 格式
+        if "```json" in result:
+            result = result.split("```json")[1].split("```")[0]
+        elif "```" in result:
+            result = result.split("```")[1].split("```")[0]
+            
+        return json.loads(result.strip())
+    except Exception as e:
+        print(f"Search Query Generation Error: {e}")
+        # Fallback to simple extraction method
+        search_term = query
+        if "是什么" in search_term:
+            search_term = search_term.split("是什么")[0]
+        elif "是什麼" in search_term:
+            search_term = search_term.split("是什麼")[0]
+        
+        # Remove trailing question marks
+        search_term = search_term.rstrip("?？")
+        return [search_term]
+
+
+def generate_search_strategies(query: str, persona: dict) -> list:
+    """
+    Generate multiple search strategies based on user question and persona
+    
+    Args:
+        query: The user's question
+        persona: Dict containing 'tone' and 'logic'
+        
+    Returns:
+        List of search strategy dictionaries with query and description
+    """
+    
+    system_prompt = f"""
+    你是一个知识图谱检索策略专家。你的任务是根据用户的提问和用户画像，生成多种不同的检索策略，
+    以最大化找到相关节点和关系的可能性。
+    
+    【用户画像】
+    - 语言风格/语气: {persona.get('tone', '正常')}
+    - 思维逻辑: {persona.get('logic', '正常')}
+    
+    请分析用户的提问，结合用户画像，生成3-6种不同的检索策略。每种策略应包含：
+    1. 一个具体的检索关键词
+    2. 该策略的简要说明（为何这种检索方式可能有效）
+    
+    回答要求：
+    1. 直接返回一个纯JSON数组，不要包含其他文字或格式符号
+    2. 数组中每个元素都是一个对象，包含"query"和"description"两个字段
+    3. "query"是用于检索的关键词字符串
+    4. "description"是该策略的简要说明
+    5. 按照有效性排序，最有希望的策略放在前面
+    
+    示例输出格式：
+    [
+      {{"query": "关键词1", "description": "策略1说明"}},
+      {{"query": "关键词2", "description": "策略2说明"}}
+    ]
+    """
+    
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    data = {
+        "model": MODEL_FALLBACK,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"请为以下问题生成检索策略：{query}"}
+        ],
+        "temperature": 0.5
+    }
+    
+    try:
+        response = requests.post(f"{BASE_URL}/chat/completions", headers=headers, json=data)
+        response.raise_for_status()
+        result = response.json()['choices'][0]['message']['content']
+        
+        # 清理可能的 Markdown 格式
+        if "```json" in result:
+            result = result.split("```json")[1].split("```")[0]
+        elif "```" in result:
+            result = result.split("```")[1].split("```")[0]
+            
+        return json.loads(result.strip())
+    except Exception as e:
+        print(f"Search Strategy Generation Error: {e}")
+        # Fallback to simple extraction method
+        search_term = query
+        if "是什么" in search_term:
+            search_term = search_term.split("是什么")[0]
+        elif "是什麼" in search_term:
+            search_term = search_term.split("是什麼")[0]
+        
+        # Remove trailing question marks
+        search_term = search_term.rstrip("?？")
+        return [
+            {"query": search_term, "description": "基于问题主体的直接检索"},
+            {"query": search_term.split()[-1] if " " in search_term else search_term, "description": "基于最后一个词的精确检索"}
+        ]

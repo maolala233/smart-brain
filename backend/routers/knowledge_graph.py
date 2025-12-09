@@ -450,7 +450,7 @@ def smart_qa_chat(
     try:
         # 1. Fetch User Persona
         from models import EmployeePersona
-        from services.llm_service import generate_smart_qa_response
+        from services.llm_service import generate_smart_qa_response, generate_search_strategies
         
         persona = db.query(EmployeePersona).filter(EmployeePersona.user_id == user_id).first()
         if not persona:
@@ -462,15 +462,56 @@ def smart_qa_chat(
                 "logic": persona.extracted_positive_logic or persona.base_logic_type or "正常"
             }
             
-        # 2. Search Knowledge Graph (Multi-Subgraph)
-        search_results = neo4j_service.search_graph_multi(user_id, request.subgraph_ids, request.query)
+        # 2. Generate search strategies using LLM based on user persona
+        search_strategies = generate_search_strategies(request.query, persona_data)
         
-        # 3. Generate Response via LLM
-        answer = generate_smart_qa_response(request.query, persona_data, search_results)
+        # 3. Search Knowledge Graph with all strategies
+        all_search_results = {
+            "nodes": [],
+            "relationships": [],
+            "search_strategies": search_strategies
+        }
+        
+        for strategy in search_strategies:
+            search_query = strategy["query"]
+            # Use comprehensive search for better results
+            search_results = neo4j_service.search_graph_comprehensive(user_id, request.subgraph_ids, search_query)
+            # 合并搜索结果
+            for node in search_results["nodes"]:
+                node["strategy"] = strategy["description"]
+                all_search_results["nodes"].append(node)
+                
+            for rel in search_results["relationships"]:
+                rel["strategy"] = strategy["description"]
+                all_search_results["relationships"].append(rel)
+        
+        # 4. 去重
+        # 创建一个临时的唯一标识符集合来去重节点
+        unique_nodes = []
+        seen_node_ids = set()
+        for node in all_search_results["nodes"]:
+            node_key = (node["id"], node["subgraph_id"])
+            if node_key not in seen_node_ids:
+                unique_nodes.append(node)
+                seen_node_ids.add(node_key)
+        all_search_results["nodes"] = unique_nodes
+        
+        # 创建一个临时的唯一标识符集合来去重关系
+        unique_rels = []
+        seen_rel_ids = set()
+        for rel in all_search_results["relationships"]:
+            rel_key = (rel["from"], rel["to"], rel["type"], rel["subgraph_id"])
+            if rel_key not in seen_rel_ids:
+                unique_rels.append(rel)
+                seen_rel_ids.add(rel_key)
+        all_search_results["relationships"] = unique_rels
+            
+        # 5. Generate Response via LLM
+        answer = generate_smart_qa_response(request.query, persona_data, all_search_results)
         
         return {
             "answer": answer,
-            "context": search_results
+            "context": all_search_results
         }
         
     except Exception as e:
