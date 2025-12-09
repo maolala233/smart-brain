@@ -30,20 +30,7 @@ interface Message {
     senderName?: string;
 }
 
-interface UserPersona {
-    id: number;
-    name: string;
-    role: string;
-    avatar_url: string;
-    tone: string;
-    logic: string;
-    description: string;
-}
 
-interface Subgraph {
-    id: number;
-    name: string;
-}
 
 const SmartQA: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([{
@@ -64,8 +51,7 @@ const SmartQA: React.FC = () => {
     const [showEvidenceGraph, setShowEvidenceGraph] = useState(false);
     const [evidenceData, setEvidenceData] = useState<{ nodes: any[], relationships: any[] }>({ nodes: [], relationships: [] });
 
-    // Auto-scroll ref
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+
 
     const navigate = useNavigate();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
