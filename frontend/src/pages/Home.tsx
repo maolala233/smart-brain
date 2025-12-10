@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Brain, ArrowRight, Zap, MessageSquare, Users, Share2 } from 'lucide-react';
+import { Brain, Zap, MessageSquare, Users, Share2 } from 'lucide-react';
 
 const Home: React.FC = () => {
     return (
@@ -34,46 +34,45 @@ const Home: React.FC = () => {
                         提取您的逻辑思维、语言风格与专业知识,打造您的专属AI代理。
                     </p>
 
-                    <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
-                        <Link to="/entry">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex items-center justify-center gap-4 w-full max-w-4xl px-4">
+                        <Link to="/entry" className="w-full lg:w-auto">
                             <motion.button
-                                whileHover={{ scale: 1.05 }}
+                                whileHover={{ scale: 1.05, backgroundColor: "rgba(59, 130, 246, 0.2)" }}
                                 whileTap={{ scale: 0.95 }}
-                                className="group relative px-8 py-4 bg-blue-600 hover:bg-blue-500 rounded-full text-lg font-bold transition-all shadow-[0_0_20px_rgba(37,99,235,0.5)] hover:shadow-[0_0_30px_rgba(37,99,235,0.8)]"
+                                className="w-full flex items-center justify-center gap-2 px-8 py-4 bg-gray-800/40 hover:bg-gray-800/60 rounded-xl text-lg font-bold text-blue-300 border border-blue-500/30 hover:border-blue-500 transition-all shadow-[0_0_15px_rgba(59,130,246,0.1)] hover:shadow-[0_0_25px_rgba(59,130,246,0.3)] backdrop-blur-sm group"
                             >
-                                <span className="flex items-center gap-2">
-                                    开始构建画像
-                                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                                </span>
+                                <Zap className="w-5 h-5 group-hover:text-blue-200" />
+                                <span>开始构建画像</span>
                             </motion.button>
                         </Link>
 
-                        <Link to="/users">
+                        <Link to="/users" className="w-full lg:w-auto">
                             <motion.button
-                                whileHover={{ scale: 1.05 }}
+                                whileHover={{ scale: 1.05, backgroundColor: "rgba(255, 255, 255, 0.1)" }}
                                 whileTap={{ scale: 0.95 }}
-                                className="flex items-center gap-2 px-8 py-4 bg-gray-800 hover:bg-gray-700 rounded-full text-lg font-bold text-gray-300 hover:text-white transition-all border border-gray-700 hover:border-gray-600"
+                                className="w-full flex items-center justify-center gap-2 px-8 py-4 bg-gray-800/40 hover:bg-gray-800/60 rounded-xl text-lg font-bold text-gray-300 hover:text-white border border-gray-600/30 hover:border-gray-500 transition-all backdrop-blur-sm"
                             >
                                 <Users className="w-5 h-5" />
                                 <span>已存用户画像</span>
                             </motion.button>
                         </Link>
 
-                        <Link to="/knowledge-graph">
+                        <Link to="/knowledge-graph" className="w-full lg:w-auto">
                             <motion.button
-                                whileHover={{ scale: 1.05 }}
+                                whileHover={{ scale: 1.05, backgroundColor: "rgba(168, 85, 247, 0.1)" }}
                                 whileTap={{ scale: 0.95 }}
-                                className="flex items-center gap-2 px-8 py-4 bg-gray-800 hover:bg-gray-700 rounded-full text-lg font-bold text-gray-300 hover:text-white transition-all border border-gray-700 hover:border-gray-600"
+                                className="w-full flex items-center justify-center gap-2 px-8 py-4 bg-gray-800/40 hover:bg-gray-800/60 rounded-xl text-lg font-bold text-purple-300 hover:text-purple-200 border border-purple-500/30 hover:border-purple-500 transition-all shadow-[0_0_15px_rgba(168,85,247,0.1)] hover:shadow-[0_0_25px_rgba(168,85,247,0.3)] backdrop-blur-sm"
                             >
                                 <Share2 className="w-5 h-5" />
                                 <span>知识图谱</span>
                             </motion.button>
                         </Link>
-                        <Link to="/smart-qa">
+
+                        <Link to="/smart-qa" className="w-full lg:w-auto">
                             <motion.button
-                                whileHover={{ scale: 1.05 }}
+                                whileHover={{ scale: 1.05, backgroundColor: "rgba(16, 185, 129, 0.1)" }}
                                 whileTap={{ scale: 0.95 }}
-                                className="flex items-center gap-2 px-8 py-4 bg-blue-600 hover:bg-blue-500 rounded-full text-lg font-bold text-white transition-all shadow-[0_0_20px_rgba(37,99,235,0.5)] hover:shadow-[0_0_30px_rgba(37,99,235,0.8)]"
+                                className="w-full flex items-center justify-center gap-2 px-8 py-4 bg-gray-800/40 hover:bg-gray-800/60 rounded-xl text-lg font-bold text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 hover:border-emerald-500 transition-all shadow-[0_0_15px_rgba(16,185,129,0.1)] hover:shadow-[0_0_25px_rgba(16,185,129,0.3)] backdrop-blur-sm"
                             >
                                 <MessageSquare className="w-5 h-5" />
                                 <span>智慧问答</span>

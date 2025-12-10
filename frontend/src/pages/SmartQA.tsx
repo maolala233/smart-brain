@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, User, Share2, Send, Bot, CheckCircle, Circle, ArrowLeft, Loader2 } from 'lucide-react';
+import { Send, User, Bot, Share2, CheckCircle, Network, ArrowLeft, Loader2, Search, Circle } from 'lucide-react';
+import EvidenceGraphModal from '../components/EvidenceGraphModal';
 
 interface UserProfile {
     id: number;
@@ -25,17 +26,32 @@ interface Message {
     id: string;
     type: 'user' | 'ai';
     content: string;
+    context?: any; // To store search strategies and other metadata
+    senderName?: string;
 }
 
+
+
 const SmartQA: React.FC = () => {
-    const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
+    const [messages, setMessages] = useState<Message[]>([{
+        id: '1',
+        type: 'ai',
+        content: '你好！我是你的智慧助手。请选择一个"数字分身"并提问，我会用TA的思维逻辑回答你。',
+        senderName: '智慧助手'
+    }]);
+    const [question, setQuestion] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
     const [selectedUser, setSelectedUser] = useState<number | null>(null);
+    const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
     const [subgraphs, setSubgraphs] = useState<KnowledgeSubgraph[]>([]);
     const [selectedSubgraphs, setSelectedSubgraphs] = useState<number[]>([]);
-    const [question, setQuestion] = useState('');
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+
+    // Evidence Graph State
+    const [showEvidenceGraph, setShowEvidenceGraph] = useState(false);
+    const [evidenceData, setEvidenceData] = useState<{ nodes: any[], relationships: any[] }>({ nodes: [], relationships: [] });
+
+
 
     const navigate = useNavigate();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -104,15 +120,21 @@ const SmartQA: React.FC = () => {
             type: 'user',
             content: question
         };
-        
+
         setMessages(prev => [...prev, userMessage]);
         setIsLoading(true);
         setError('');
-        
+
         const currentQuestion = question;
         setQuestion('');
 
         try {
+            // Prepare history (last 5 messages)
+            const history = messages.slice(-5).map(msg => ({
+                role: msg.type === 'user' ? 'user' : 'assistant',
+                content: msg.content
+            }));
+
             const response = await fetch(`/api/kg/smart-qa/${selectedUser}`, {
                 method: 'POST',
                 headers: {
@@ -121,16 +143,20 @@ const SmartQA: React.FC = () => {
                 body: JSON.stringify({
                     query: currentQuestion,
                     subgraph_ids: selectedSubgraphs,
+                    history: history
                 }),
             });
 
             if (response.ok) {
                 const data = await response.json();
                 // 添加AI回复到对话历史
+                const sender = userProfiles.find(u => u.id === selectedUser);
                 const aiMessage: Message = {
                     id: (Date.now() + 1).toString(),
                     type: 'ai',
-                    content: data.answer
+                    content: data.answer,
+                    context: data.context, // Save the context data
+                    senderName: sender?.name || 'AI助手'
                 };
                 setMessages(prev => [...prev, aiMessage]);
             } else {
@@ -184,35 +210,43 @@ const SmartQA: React.FC = () => {
                     <div className="lg:col-span-1 bg-gray-800/50 backdrop-blur-xl rounded-2xl border border-gray-700 p-6 flex flex-col gap-6 h-fit max-h-[calc(100vh-160px)] overflow-y-auto">
 
                         {/* 1. 用户画像选择 */}
-                        <div>
-                            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-blue-400">
-                                <User className="w-5 h-5" />
-                                选择用户画像
+                        <div className="space-y-4">
+                            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <User className="w-4 h-4" />
+                                选择数字分身
                             </h3>
-                            <div className="space-y-3">
-                                {userProfiles.map((user) => (
-                                    <div
-                                        key={user.id}
-                                        onClick={() => setSelectedUser(user.id)}
-                                        className={`p-3 rounded-lg cursor-pointer transition-all border ${
-                                            selectedUser === user.id
-                                                ? 'bg-blue-600/20 border-blue-500'
-                                                : 'bg-gray-900/50 border-gray-700 hover:border-gray-500'
-                                        }`}
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <span className="font-medium text-sm">{user.name}</span>
-                                            {selectedUser === user.id && <CheckCircle className="w-4 h-4 text-blue-400" />}
-                                        </div>
-                                        {user.persona && (
-                                            <div className="text-xs text-gray-400 mt-1 truncate">
-                                                {user.persona.name}
-                                            </div>
-                                        )}
+                            <div className="space-y-2">
+                                {userProfiles.length === 0 ? (
+                                    <div className="text-gray-500 text-sm text-center py-4 bg-gray-900/50 rounded-lg">
+                                        暂无可用画像
                                     </div>
-                                ))}
-                                {userProfiles.length === 0 && (
-                                    <div className="text-gray-500 text-sm text-center">暂无画像</div>
+                                ) : (
+                                    userProfiles.map(user => (
+                                        <button
+                                            key={user.id}
+                                            onClick={() => setSelectedUser(user.id)}
+                                            className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${selectedUser === user.id
+                                                ? 'bg-blue-600/20 border-blue-500/50 shadow-lg shadow-blue-500/10'
+                                                : 'bg-gray-800/50 border-gray-700 hover:border-gray-600 hover:bg-gray-800'
+                                                }`}
+                                        >
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${selectedUser === user.id ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-400'
+                                                }`}>
+                                                <User className="w-6 h-6" />
+                                            </div>
+                                            <div className="text-left">
+                                                <div className={`font-medium ${selectedUser === user.id ? 'text-blue-300' : 'text-gray-200'}`}>
+                                                    {user.name}
+                                                </div>
+                                                <div className="text-xs text-gray-500">
+                                                    {user.role || '普通用户'}
+                                                </div>
+                                            </div>
+                                            {selectedUser === user.id && (
+                                                <CheckCircle className="w-5 h-5 text-blue-400 ml-auto" />
+                                            )}
+                                        </button>
+                                    ))
                                 )}
                             </div>
                         </div>
@@ -228,11 +262,10 @@ const SmartQA: React.FC = () => {
                                     <div
                                         key={subgraph.id}
                                         onClick={() => handleSubgraphToggle(subgraph.id)}
-                                        className={`p-3 rounded-lg cursor-pointer transition-all border flex items-center gap-3 ${
-                                            selectedSubgraphs.includes(subgraph.id)
-                                                ? 'bg-purple-600/20 border-purple-500'
-                                                : 'bg-gray-900/50 border-gray-700 hover:border-gray-500'
-                                        }`}
+                                        className={`p-3 rounded-lg cursor-pointer transition-all border flex items-center gap-3 ${selectedSubgraphs.includes(subgraph.id)
+                                            ? 'bg-purple-600/20 border-purple-500'
+                                            : 'bg-gray-900/50 border-gray-700 hover:border-gray-500'
+                                            }`}
                                     >
                                         {selectedSubgraphs.includes(subgraph.id) ? (
                                             <CheckCircle className="w-4 h-4 text-purple-400 flex-shrink-0" />
@@ -275,16 +308,15 @@ const SmartQA: React.FC = () => {
                             ) : (
                                 <div className="space-y-4">
                                     {messages.map((message) => (
-                                        <div 
-                                            key={message.id} 
+                                        <div
+                                            key={message.id}
                                             className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
                                         >
-                                            <div 
-                                                className={`max-w-3xl rounded-2xl px-4 py-3 ${
-                                                    message.type === 'user' 
-                                                        ? 'bg-blue-600/20 border border-blue-500/30' 
-                                                        : 'bg-gray-800/50 border border-gray-700'
-                                                }`}
+                                            <div
+                                                className={`max-w-3xl rounded-2xl px-4 py-3 ${message.type === 'user'
+                                                    ? 'bg-blue-600/20 border border-blue-500/30'
+                                                    : 'bg-gray-800/50 border border-gray-700'
+                                                    }`}
                                             >
                                                 <div className="flex items-center gap-2 mb-1">
                                                     {message.type === 'user' ? (
@@ -293,9 +325,75 @@ const SmartQA: React.FC = () => {
                                                         <Bot className="w-4 h-4 text-green-400" />
                                                     )}
                                                     <span className="text-xs font-medium">
-                                                        {message.type === 'user' ? '你' : 'AI助手'}
+                                                        {message.type === 'user' ? '你' : (message.senderName || 'AI助手')}
                                                     </span>
                                                 </div>
+
+                                                {/* Search Strategy Visualization */}
+                                                {message.type === 'ai' && message.context?.search_strategies && (
+                                                    <div className="mb-3 mt-1 p-3 bg-gray-900/50 rounded-lg border border-gray-700/50 text-xs">
+                                                        <div className="font-semibold text-gray-400 mb-2 flex items-center gap-1">
+                                                            <Share2 className="w-3 h-3" />
+                                                            检索逻辑 (基于用户画像)
+                                                        </div>
+                                                        <div className="space-y-2 mb-3">
+                                                            {message.context.search_strategies.map((strategy: any, idx: number) => (
+                                                                <div key={idx} className="flex flex-col gap-1 border-l-2 border-blue-500/30 pl-2">
+                                                                    <div className="text-blue-300 font-medium">
+                                                                        策略: {strategy.query}
+                                                                    </div>
+                                                                    <div className="text-gray-500">
+                                                                        {strategy.description}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+
+                                                        {/* Evidence Visualization */}
+                                                        {(message.context.nodes?.length > 0 || message.context.relationships?.length > 0) && (
+                                                            <div className="border-t border-gray-700/50 pt-2 mt-2">
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <div className="font-semibold text-gray-400 flex items-center gap-1">
+                                                                        <CheckCircle className="w-3 h-3 text-green-500/50" />
+                                                                        参考证据
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setEvidenceData({
+                                                                                nodes: message.context.nodes || [],
+                                                                                relationships: message.context.relationships || []
+                                                                            });
+                                                                            setShowEvidenceGraph(true);
+                                                                        }}
+                                                                        className="flex items-center gap-1 text-[10px] bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 px-2 py-1 rounded transition-colors"
+                                                                    >
+                                                                        <Network className="w-3 h-3" />
+                                                                        查看图谱
+                                                                    </button>
+                                                                </div>
+
+                                                                {/* Nodes */}
+                                                                {message.context.nodes?.length > 0 && (
+                                                                    <div className="flex flex-wrap gap-1 mb-2">
+                                                                        {message.context.nodes.map((node: any, idx: number) => (
+                                                                            <span key={idx} className="bg-gray-800 text-gray-300 px-2 py-0.5 rounded border border-gray-700 text-[10px] truncate max-w-[150px]" title={`Label: ${node.label}`}>
+                                                                                {node.name}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Relationships (Simple count or list) */}
+                                                                {message.context.relationships?.length > 0 && (
+                                                                    <div className="text-[10px] text-gray-500">
+                                                                        已关联 {message.context.relationships.length} 条关系数据
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+
                                                 <div className="whitespace-pre-wrap leading-relaxed text-gray-200">
                                                     {message.content}
                                                 </div>
@@ -307,7 +405,9 @@ const SmartQA: React.FC = () => {
                                             <div className="max-w-3xl rounded-2xl px-4 py-3 bg-gray-800/50 border border-gray-700">
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <Bot className="w-4 h-4 text-green-400" />
-                                                    <span className="text-xs font-medium">AI助手</span>
+                                                    <span className="text-xs font-medium">
+                                                        {userProfiles.find(u => u.id === selectedUser)?.name || 'AI助手'}
+                                                    </span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
@@ -355,6 +455,13 @@ const SmartQA: React.FC = () => {
 
                 </div>
             </div>
+
+            {/* Evidence Modal */}
+            <EvidenceGraphModal
+                isOpen={showEvidenceGraph}
+                onClose={() => setShowEvidenceGraph(false)}
+                data={evidenceData}
+            />
         </div>
     );
 };

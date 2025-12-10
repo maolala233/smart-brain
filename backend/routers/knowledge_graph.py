@@ -32,6 +32,7 @@ class SubgraphResponse(BaseModel):
 class SmartQARequest(BaseModel):
     query: str
     subgraph_ids: List[int]
+    history: Optional[List[Dict[str, str]]] = [] # List of {"role": "user/assistant", "content": "..."}
 
 # --- Subgraph Management ---
 
@@ -462,8 +463,8 @@ def smart_qa_chat(
                 "logic": persona.extracted_positive_logic or persona.base_logic_type or "正常"
             }
             
-        # 2. Generate search strategies using LLM based on user persona
-        search_strategies = generate_search_strategies(request.query, persona_data)
+        # 2. Generate search strategies using LLM based on user persona and history
+        search_strategies = generate_search_strategies(request.query, persona_data, request.history)
         
         # 3. Search Knowledge Graph with all strategies
         all_search_results = {
@@ -506,8 +507,8 @@ def smart_qa_chat(
                 seen_rel_ids.add(rel_key)
         all_search_results["relationships"] = unique_rels
             
-        # 5. Generate Response via LLM
-        answer = generate_smart_qa_response(request.query, persona_data, all_search_results)
+        # 5. Generate Response via LLM with history
+        answer = generate_smart_qa_response(request.query, persona_data, all_search_results, request.history)
         
         return {
             "answer": answer,
